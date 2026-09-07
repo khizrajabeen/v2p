@@ -1,0 +1,130 @@
+{% set name = "v2p" %}
+{% set version = "1.0.0" %}
+
+# bioconda recipe for v2p.
+#
+# THIS RECIPE IS NOT BUILDABLE AS IT STANDS. Three things must land first,
+# and each is marked TODO(owner) at the point it bites:
+#
+#   1. A release on PyPI, so `source.sha256` can be a real checksum rather
+#      than the placeholder below. Until then, build from the git source
+#      block that is commented out under `source:`.
+#   2. A LICENSE file at the repo root. bioconda's linter rejects a recipe
+#      whose `about.license_file` does not resolve, and conda-build errors
+#      outright. There is no LICENSE in this repo today and no copyright
+#      statement anywhere in README.md or docs/, so the licence below is a
+#      proposal that the project owner has to confirm.
+#   3. src/v2p/cli.py. The `v2p` entry point is the Milestone 6 contract but
+#      the CLI is still scripts/v2p; see the note in the test: section.
+#
+# `version` above must stay in step with src/v2p/__init__.py's __version__,
+# which pyproject.toml reads via [tool.setuptools.dynamic]. conda recipes
+# have no way to import that, so this is the one unavoidable duplicate.
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  # TODO(owner): real sha256 once v2p 1.0.0 is on PyPI. `openssl sha256
+  # v2p-1.0.0.tar.gz` on the sdist that `python -m build` produces.
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: 0000000000000000000000000000000000000000000000000000000000000000
+
+  # Until there is a PyPI release, swap the two blocks:
+  # git_url: https://github.com/OWNER/v2p.git
+  # git_rev: v{{ version }}
+
+build:
+  number: 0
+  # Pure Python, no compiled extensions, no arch-specific data -- one
+  # artefact serves every platform and every Python in the range.
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  entry_points:
+    - v2p = v2p.cli:main
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    # Matches pyproject.toml's [build-system]. >=64 is the first release
+    # that builds a src-layout project from pyproject.toml alone.
+    - setuptools >=64
+    - wheel
+  run:
+    - python >=3.10
+    # The only genuine runtime dependency: random access into the reference
+    # genome FASTA, imported lazily in v2p/annotation.py.
+    #
+    # biopython is NOT listed. requirements.txt calls it optional and
+    # `grep -rn "Bio\." src/ scripts/ tests/` finds no import of it -- only
+    # a prose mention in seqops.py's docstring. Listing it would drag
+    # numpy into every bioconda install of this package for nothing.
+    - pyfaidx >=0.7.2
+
+test:
+  imports:
+    - v2p
+    - v2p.annotation
+    - v2p.discover
+    - v2p.fasta
+    - v2p.invariants
+    - v2p.nmd
+    - v2p.peptides
+    - v2p.provenance
+    - v2p.seqops
+    - v2p.validate
+    - v2p.build
+    - v2p.build.fusion
+    - v2p.build.smallvar
+    - v2p.build.splicing
+    - v2p.parse
+    - v2p.parse.inputs
+  commands:
+    - pip check
+    # TODO(owner): uncomment when src/v2p/cli.py exists. Today the console
+    # script resolves to v2p.cli:main, which is not a module yet -- the CLI
+    # lives in scripts/v2p, outside the package -- so this would fail with
+    # ModuleNotFoundError: No module named 'v2p.cli'. Leaving it commented
+    # rather than deleted so the move restores a real smoke test.
+    # - v2p --help
+    # - v2p detect --help
+
+about:
+  # TODO(owner): OWNER is a placeholder. This working copy has no git remote
+  # and no repository URL in README.md or docs/, so these cannot be filled
+  # in truthfully from the repo. bioconda requires `home` to resolve.
+  home: https://github.com/OWNER/v2p
+  dev_url: https://github.com/OWNER/v2p
+  doc_url: https://github.com/OWNER/v2p/blob/main/docs/TOOL_DESIGN.md
+  # TODO(owner): confirm. See the header note -- there is no LICENSE file.
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE
+  summary: Convert genomic and transcriptomic variant calls into amino-acid sequences
+  description: |
+    v2p builds a single protein sequence database from four kinds of
+    evidence at once -- small variants (SNV/InDel), RNA editing, gene
+    fusions and alternative splicing -- and records the fate of every input
+    variant, whether or not it produced a sequence.
+
+    Every output sequence is traceable to the call that produced it, and a
+    release is checked against nine output invariants before it is declared
+    successful: that the per-type files exactly partition the combined
+    file, that every input variant appears exactly once in the disposition
+    table, that sequence counts sum, that ids are unique, that the layout
+    matches the supplied proteome template, that reference translations
+    agree with the annotation source, and that the manifest checksums match
+    what is on disk.
+
+    RNA editing is a first-class evidence type: A-to-I recoding produces
+    proteoforms with no genomic basis, so they are invisible to any
+    DNA-driven pipeline.
+
+extra:
+  # TODO(owner): bioconda requires at least one maintainer GitHub handle.
+  recipe-maintainers:
+    - OWNER
+  identifiers:
+    # TODO(owner): add a doi: entry once the tool is published.

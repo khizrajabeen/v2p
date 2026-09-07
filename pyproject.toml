@@ -1,0 +1,123 @@
+[build-system]
+# setuptools>=64 is the first release with first-class PEP 621 + src-layout
+# support in pyproject.toml alone (no setup.py, no setup.cfg). Deliberately
+# NOT requiring >=77 (PEP 639 SPDX license expressions): Ubuntu 24.04 and the
+# python:3.12-slim base image both ship setuptools 68, and pinning higher
+# forces a network fetch of the build backend in environments that would
+# otherwise build offline with --no-build-isolation.
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "v2p"
+description = "Convert genomic and transcriptomic variant calls into amino-acid sequences, with every output sequence traceable to the call that produced it."
+readme = "README.md"
+
+# 3.10 is the floor because the codebase uses PEP 604 unions in runtime
+# positions (`Path | None` in v2p.invariants.check_release) and PEP 585
+# builtin generics. `from __future__ import annotations` defers the
+# annotations themselves, but the dataclass and argparse code paths still
+# need 3.10 semantics. No upper cap: capping blocks a new Python the day it
+# ships and bioconda rejects tight caps on pure-Python packages.
+requires-python = ">=3.10"
+
+# TODO(owner): confirm the licence. There is no LICENSE file in this repo and
+# no copyright statement in README.md or docs/, so MIT here is a proposal,
+# not a fact recorded elsewhere. It must be confirmed and a LICENSE file
+# added before any PyPI or bioconda upload -- bioconda's linter requires
+# license_file to point at a real file.
+license = { text = "MIT" }
+
+# Email only: the repo carries no author name anywhere, and inventing one
+# would put a wrong name on a scientific artefact.
+authors = [{ email = "chen.q@wehi.edu.au" }]
+
+keywords = [
+    "proteogenomics",
+    "variant",
+    "protein-database",
+    "rna-editing",
+    "gene-fusion",
+    "alternative-splicing",
+    "mass-spectrometry",
+    "fasta",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Typing :: Typed",
+]
+
+# Random access into a multi-gigabyte genome FASTA. Imported lazily inside
+# v2p.annotation.Genome.__init__ (annotation.py:124), so `import v2p`
+# succeeds without it, but no translation can run without it.
+#
+# biopython is deliberately ABSENT. requirements.txt lists it as optional and
+# `grep -rn "Bio\." src/ scripts/ tests/` returns no import of it anywhere --
+# only a prose mention in seqops.py's module docstring. Declaring an unused
+# 30 MB dependency would slow every install and every CI matrix leg for
+# nothing.
+dependencies = ["pyfaidx>=0.7.2"]
+
+# Single source of truth: setuptools reads src/v2p/__init__.py's
+# `__version__` from the AST, without importing the package, so resolving
+# the version does not require pyfaidx to be installed at build time.
+dynamic = ["version"]
+
+[project.optional-dependencies]
+# Nothing here imports pytest; tests/test_pipeline.py and
+# tests/test_invariants.py are plain scripts that exit non-zero on failure.
+# This extra exists so `pip install v2p[dev]` gets the linters CI runs.
+dev = ["build>=1.0", "twine>=4.0"]
+
+[project.urls]
+# TODO(owner): OWNER is a placeholder. There is no git remote in this
+# working copy and no repository URL anywhere in README.md or docs/, so
+# these cannot be filled in truthfully from the repo itself. Replace before
+# publishing -- a wrong Homepage in package metadata is worse than none.
+Homepage = "https://github.com/OWNER/v2p"
+Repository = "https://github.com/OWNER/v2p"
+Issues = "https://github.com/OWNER/v2p/issues"
+Documentation = "https://github.com/OWNER/v2p/blob/main/docs/TOOL_DESIGN.md"
+
+[project.scripts]
+# The contract in docs/BUILD_SPEC.md "Milestone 6".
+#
+# WARNING, READ BEFORE INSTALLING: src/v2p/cli.py DOES NOT EXIST YET. The
+# CLI currently lives in scripts/v2p, an extensionless executable script that
+# bootstraps sys.path itself. Moving it into the package is a separate,
+# deliberately-scoped change. Until that move lands, `pip install .` succeeds
+# and installs a `v2p` console script that raises
+# ModuleNotFoundError: No module named 'v2p.cli' when invoked.
+v2p = "v2p.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "v2p.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+# Explicit rather than implicit: this must resolve to exactly
+# v2p, v2p.build, v2p.parse. Each has an __init__.py on disk.
+include = ["v2p*"]
+namespaces = false
+
+[tool.setuptools]
+# There are no non-.py files under src/v2p/, so there is nothing to ship as
+# package data. Turning this off is not cosmetic: with it on, setuptools'
+# sdist file-finders can sweep in the *.bak snapshots that sit beside the
+# modules (src/v2p/discover.py.v20.bak, discover.py.v21.bak,
+# build/smallvar.py.v111.bak). Shipping a stale copy of a translation module
+# inside the wheel is exactly the kind of thing that gets imported by
+# accident during a debugging session.
+include-package-data = false

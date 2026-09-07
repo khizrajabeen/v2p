@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""v2p — variant sequences to protein sequences.
+
+    v2p detect <folder>                     what is in here
+    v2p run    <folder> --ref <dir>         the whole conversion
+    v2p audit  --ref <dir>                  check the reference interface
+
+The implementation lives in `v2p.cli`, so `pip install v2p` can expose the
+same entry point (`v2p = v2p.cli:main`) without a second copy of it. This
+file stays for running straight from a source checkout, where `src/` is not
+yet on `sys.path`.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from v2p.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,31 @@
+# The pipeline runs on Linux. A CRLF shebang makes the kernel refuse the
+# interpreter ("bad interpreter: No such file or directory"), which would
+# break scripts/v2p and every *.sh the moment someone clones on Windows and
+# pushes back. Normalise to LF in the repository and on checkout.
+* text=auto eol=lf
+
+# Extensionless executable — named explicitly so it is never guessed.
+scripts/v2p text eol=lf
+
+*.py       text eol=lf
+*.sh       text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.toml     text eol=lf
+*.md       text eol=lf
+*.tsv      text eol=lf
+*.txt      text eol=lf
+Makefile   text eol=lf
+Dockerfile text eol=lf
+
+# Sequence and annotation data. Diffing a multi-GB FASTA helps nobody, and
+# these must never be line-ending-converted.
+*.fa    -text -diff
+*.fasta -text -diff
+*.gtf   -text -diff
+*.vcf   -text -diff
+*.gz    binary
+*.bgz   binary
+*.csi   binary
+*.tbi   binary
+*.fai   binary

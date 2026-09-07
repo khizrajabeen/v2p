@@ -1,0 +1,25 @@
+# PEFF 1.0
+# //
+# DbName=HCC1395_variant_proteome
+# DbDescription=HCC1395 variant protein database
+# Prefix=HCC1395
+# DbSource=HCC1395 high-confidence variant package
+# DbVersion=2026-09-03
+# SequenceType=AA
+# NumberOfEntries=7
+# GeneralComment=Custom keys VariantType, Consequence, TranscriptId, ProteinChange, GenomicLocus, NovelSpan, EvidenceSource, Confidence are non-standard extensions; PEFF-compliant readers ignore unknown keys.
+# //
+>HCC1395:GPLUS_GPLUS_T_chrT1_134_A_C \DbUniqueId=GPLUS_GPLUS_T_chrT1_134_A_C \PName=GPLUS somatic single-nucleotide variant \GName=GPLUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=20 \VariantSimple=(5|Q) \VariantType=SNV \Consequence=missense \TranscriptId=GPLUS_T \ProteinChange=p.K5Q \GenomicLocus=chrT1:134A>C \NovelSpan=5-5 \EvidenceSource=sSNV_sIndel_VCF \Confidence=PASS
+MASTQLYVWQDEGHRNFIPC
+>HCC1395:REF_GPLUS_GPLUS_T \DbUniqueId=REF_GPLUS_GPLUS_T \PName=GPLUS unmodified reference protein \GName=GPLUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=20 \VariantType=REFERENCE \Consequence=reference \TranscriptId=GPLUS_T \GenomicLocus=chrT1:134A>C \EvidenceSource=reference \Comment=reference_protein
+MASTKLYVWQDEGHRNFIPC
+>HCC1395:GMINUS_GMINUS_T_chrT2_384_T_C \DbUniqueId=GMINUS_GMINUS_T_chrT2_384_T_C \PName=GMINUS RNA editing site (A-to-I) \GName=GMINUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=19 \VariantSimple=(3|E) \VariantType=RNA_EDITING \Consequence=missense \TranscriptId=GMINUS_T \ProteinChange=p.K3E \GenomicLocus=chrT2:384T>C \NovelSpan=3-3 \EvidenceSource=RES_ANNOVAR
+MGETVLYSEDAWQRNFHIP
+>HCC1395:REF_GMINUS_GMINUS_T \DbUniqueId=REF_GMINUS_GMINUS_T \PName=GMINUS unmodified reference protein \GName=GMINUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=19 \VariantType=REFERENCE \Consequence=reference \TranscriptId=GMINUS_T \GenomicLocus=chrT2:384T>C \EvidenceSource=reference \Comment=reference_protein
+MGKTVLYSEDAWQRNFHIP
+>HCC1395:GPLUS--GPART3_GPLUS_T--GPART3_T_chrT1_151_chrT3_350 \DbUniqueId=GPLUS--GPART3_GPLUS_T--GPART3_T_chrT1_151_chrT3_350 \PName=GPLUS--GPART3 gene fusion \GName=GPLUS--GPART3 \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=25 \VariantType=FUSION \Consequence=frameshift_fusion \TranscriptId=GPLUS_T--GPART3_T \ProteinChange=p.junction@11 \GenomicLocus=chrT1:151::chrT3:350 \NovelSpan=11-25 \EvidenceSource=Fusion_genes \Confidence=100 \Comment=junction_on_codon_boundary;3p_frameshifted
+MASTKLYVWQILIGIVLLFLKRAEK
+>HCC1395:GPART3--GPLUS_GPART3_T--GPLUS_T_chrT3_350_chrT1_151 \DbUniqueId=GPART3--GPLUS_GPART3_T--GPLUS_T_chrT3_350_chrT1_151 \PName=GPART3--GPLUS gene fusion \GName=GPART3--GPLUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=20 \VariantType=FUSION \Consequence=frameshift_fusion \TranscriptId=GPART3_T--GPLUS_T \ProteinChange=p.junction@10 \GenomicLocus=chrT3:350::chrT1:151 \NovelSpan=10-20 \EvidenceSource=Fusion_genes \Confidence=100 \Comment=junction_mid_codon(offset=2);3p_native_frame
+MQVLKDEFGQDEGHRNFIPC
+>HCC1395:GPLUS_G_SE_form2_GPLUS_T \DbUniqueId=GPLUS_G_SE_form2_GPLUS_T \PName=GPLUS alternative splicing: skipped exon \GName=GPLUS \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=20 \VariantType=AS_SE \Consequence=SE_form2_annotated_isoform \TranscriptId=GPLUS_T \GenomicLocus=chrT1:152 \EvidenceSource=AS_LR \Confidence=0.9 \Comment=form=form2;matched_annotated_transcript
+MASTKLYVWQDEGHRNFIPC

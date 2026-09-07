@@ -1,0 +1,206 @@
+name: tests
+
+# Milestone 6 contract (docs/BUILD_SPEC.md): "test suite on Python 3.10
+# through 3.13, no reference download, under two minutes".
+#
+# The suite is deliberately cheap. tests/test_pipeline.py and
+# tests/test_invariants.py are plain scripts -- no pytest -- that build their
+# own synthetic fixtures in a temp dir and exit non-zero on the first
+# failure. Neither reads ref/. Locally both finish in a couple of seconds;
+# essentially all of the wall clock below is checkout + interpreter setup.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch cancels the first. Four-leg matrices add
+# up, and a superseded run tells you nothing.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    # Hard kill. The target is under two minutes; five is the tripwire that
+    # catches a test that has started waiting on something it should not be
+    # waiting on (a socket, a reference download, stdin).
+    timeout-minutes: 5
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # THE ONLY STEP THAT TOUCHES THE NETWORK.
+      #
+      # pyfaidx is a genuine runtime dependency: tests/test_pipeline.py:72
+      # constructs v2p.annotation.Genome(FIX/"mini.fa"), and Genome.__init__
+      # (annotation.py:124) imports pyfaidx. It is a ~30 kB pure-Python wheel.
+      #
+      # Deliberately NOT installing the package itself here. The tests
+      # bootstrap sys.path to src/ themselves (test_pipeline.py:14,
+      # test_invariants.py:23), so they test the working tree, which is what
+      # a CI run should be testing. Installability is checked separately in
+      # the `package` job below.
+      - name: Install runtime dependency
+        run: python -m pip install --disable-pip-version-check "pyfaidx>=0.7.2"
+
+      # Enforcement, not documentation. Everything past this point runs with
+      # socket creation disabled at the interpreter level, so a test that
+      # tries to download a reference -- or anything else -- fails loudly
+      # with OSError instead of quietly working on a runner that happens to
+      # have connectivity. Written outside the repo so it cannot be mistaken
+      # for part of the suite.
+      - name: Build the offline guard
+        run: |
+          cat > "${RUNNER_TEMP}/offline.py" <<'PY'
+          """Run a script with all outbound network access refused.
+
+          usage: python offline.py <script.py> [args...]
+          """
+          import runpy
+          import socket
+          import sys
+
+          _MSG = ("network access is disabled: the v2p suite must run fully "
+                  "offline (docs/BUILD_SPEC.md, Milestone 6)")
+
+
+          class _OfflineSocket(socket.socket):
+              """Still a real socket subclass, so the stdlib's
+              `class SSLSocket(socket)` in ssl.py keeps importing. It simply
+              cannot be instantiated, which turns an attempted download into
+              a legible URLError rather than a TypeError from deep inside
+              ssl.py."""
+
+              def __init__(self, *_a, **_kw):
+                  raise OSError(_MSG)
+
+
+          def _refuse(*_a, **_kw):
+              raise OSError(_MSG)
+
+
+          socket.socket = _OfflineSocket
+          socket.create_connection = _refuse
+          socket.socketpair = _refuse
+          socket.create_server = _refuse
+          socket.getaddrinfo = _refuse
+
+          target, sys.argv = sys.argv[1], sys.argv[1:]
+          runpy.run_path(target, run_name="__main__")
+          PY
+
+      # Kept as two steps rather than `make test` so a failure names which
+      # suite broke without anyone opening the log.
+      - name: tests/test_pipeline.py
+        timeout-minutes: 2
+        run: python "${RUNNER_TEMP}/offline.py" tests/test_pipeline.py
+
+      - name: tests/test_invariants.py
+        timeout-minutes: 2
+        run: python "${RUNNER_TEMP}/offline.py" tests/test_invariants.py
+
+  package:
+    # Milestone 6's definition of done: "pip install . in a clean
+    # environment followed by `v2p detect <folder>` works with no PYTHONPATH
+    # manipulation". Half of that is checkable today; see the note on the
+    # console script below.
+    name: pip install
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --disable-pip-version-check build
+          python -m build --outdir dist/
+          ls -l dist/
+
+      - name: Install the wheel into a clean venv
+        run: |
+          python -m venv "${RUNNER_TEMP}/venv"
+          "${RUNNER_TEMP}/venv/bin/python" -m pip install \
+            --disable-pip-version-check dist/*.whl
+
+      # Run from a directory that is not the checkout and with PYTHONPATH
+      # cleared, so a stray src/ on the path cannot make a broken wheel look
+      # installed.
+      - name: Import from the installed package
+        run: |
+          cd "${RUNNER_TEMP}"
+          env -u PYTHONPATH "${RUNNER_TEMP}/venv/bin/python" - <<'PY'
+          import v2p
+          import v2p.invariants
+          import v2p.annotation
+          import v2p.discover
+          import v2p.fasta
+          import v2p.nmd
+          import v2p.peptides
+          import v2p.provenance
+          import v2p.seqops
+          import v2p.validate
+          import v2p.parse.inputs
+          import v2p.build.fusion
+          import v2p.build.smallvar
+          import v2p.build.splicing
+          print("v2p", v2p.__version__, "from", v2p.__file__)
+          PY
+
+      # No wheel should ever carry the *.bak snapshots that sit beside the
+      # modules in src/v2p/ (discover.py.v20.bak, discover.py.v21.bak,
+      # build/smallvar.py.v111.bak). An old copy of a translation module
+      # inside an installed package is a debugging trap.
+      - name: Wheel carries no stale .bak snapshots
+        run: |
+          python - <<'PY'
+          import glob
+          import sys
+          import zipfile
+
+          bad = []
+          for path in glob.glob("dist/*.whl"):
+              with zipfile.ZipFile(path) as zf:
+                  bad += [n for n in zf.namelist() if n.endswith(".bak")]
+          if bad:
+              sys.exit("stale snapshots in the wheel: " + ", ".join(bad))
+          print("clean")
+          PY
+
+      # NOT YET RUNNABLE, ON PURPOSE.
+      #
+      # pyproject.toml declares `v2p = "v2p.cli:main"` because that is the
+      # Milestone 6 contract, but src/v2p/cli.py does not exist: the CLI is
+      # still scripts/v2p, an extensionless script that bootstraps sys.path
+      # itself. Until that move lands, `v2p --help` raises
+      # ModuleNotFoundError: No module named 'v2p.cli'.
+      #
+      # Uncomment together with that move -- it is the other half of
+      # Milestone 6's definition of done.
+      #
+      # - name: Console script
+      #   run: |
+      #     cd "${RUNNER_TEMP}"
+      #     env -u PYTHONPATH "${RUNNER_TEMP}/venv/bin/v2p" --help

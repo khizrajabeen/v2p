@@ -1,0 +1,5 @@
+# Stage 1 and 3 (parsing, QC) need only the Python standard library.
+# Stage 2 (translation) needs random access to the reference FASTA.
+pyfaidx>=0.7.2
+# Optional: only used if you extend the pipeline with SeqIO / alignment.
+biopython>=1.81
