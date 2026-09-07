@@ -8,7 +8,7 @@ obviously broken. This script states each one and tests it against the
 files actually in use.
 
 Usage:
-  python scripts/00_audit_references.py \
+  python src/v2p/stages/00_audit_references.py \
       --gtf ref/gencode.v44.annotation.gtf.gz \
       --genome ref/GRCh38.primary_assembly.genome.fa \
       --uniprot ref/uniprot_human_SP.fasta \
@@ -24,7 +24,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 BOLD, RESET, DIM = "\033[1m", "\033[0m", "\033[2m"
 findings: list[tuple[str, str]] = []
@@ -196,7 +196,7 @@ def audit_gtf(path: Path) -> None:
 
     # -- assumption 6: gene names are unique -----------------------------
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from v2p.annotation import Annotation
         src = (Path(__file__).resolve().parents[1]
                / "src" / "v2p" / "build" / "smallvar.py").read_text()

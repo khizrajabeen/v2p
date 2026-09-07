@@ -22,7 +22,7 @@ Steps:
   5. MANIFEST.txt with SHA-256 of every file, plus METHODS.md.
 
 Usage:
-  python scripts/06_package_release.py \
+  python src/v2p/stages/06_package_release.py \
       --fasta   results/fasta/HCC1395_variant_proteins.uniprot.representative.fasta \
       --uniprot ref/uniprot_human_SP.fasta \
       --outdir  release --decoy pseudo_reverse --append-reference
@@ -38,7 +38,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.peptides import (                                 # noqa: E402
     DECOY_METHODS, digest, novel_peptides, reference_peptide_space,

@@ -69,7 +69,7 @@ cat <<TXT
 
 VEP output ready. Compare with:
 
-  python3 scripts/05_compare_tools.py \\
+  python3 src/v2p/stages/05_compare_tools.py \\
     --fasta ours=results/fasta/HCC1395_variant_proteins.uniprot.representative.fasta \\
     --fasta vep=$OUT/vep_all_mutated.fa \\
     --k 9 --outdir results

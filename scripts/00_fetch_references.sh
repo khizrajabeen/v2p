@@ -118,5 +118,5 @@ References ready in $PWD
   --uniprot $PWD/uniprot_human_SP.fasta
 
 Sanity-check them together with:
-  python3 ../scripts/00_inspect_inputs.py ../data $PWD
+  python3 ../src/v2p/stages/00_inspect_inputs.py ../data $PWD
 EOF

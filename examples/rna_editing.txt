@@ -1,0 +1,6 @@
+Chr	Start	End	Ref	Alt	Func.refGene	Gene.refGene	GeneDetail.refGene	ExonicFunc.refGene	AAChange.refGene
+chr4	157336723	157336723	A	G	exonic	GRIA2	.	nonsynonymous SNV	GRIA2:ENST00000264426.14:.:.:p.Q607R
+chr15	75353745	75353745	A	G	exonic	NEIL1	.	nonsynonymous SNV	NEIL1:ENST00000355059.9:.:.:p.K242R
+chr20	37519170	37519170	T	C	exonic	BLCAP	.	nonsynonymous SNV	BLCAP:ENST00000373537.7:.:.:p.Y2C
+chr7	39950949	39950949	A	G	exonic	CDK13	.	nonsynonymous SNV	CDK13:ENST00000181839.10:.:.:p.Q103R
+chr13	45516236	45516236	A	G	exonic	COG3	.	nonsynonymous SNV	COG3:ENST00000349995.10:.:.:p.I635V

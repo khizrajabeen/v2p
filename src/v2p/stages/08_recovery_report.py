@@ -16,7 +16,7 @@ this report is to show that the losses are accounted for rather than
 unexplained.
 
 Usage:
-  python scripts/08_recovery_report.py \
+  python src/v2p/stages/08_recovery_report.py \
       --manifest results/tables/unified_variant_manifest.tsv \
       --disposition results/tables/disposition.representative.tsv \
       --entries release/HCC1395_variant_proteome.entries.tsv \
@@ -31,7 +31,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.provenance import RunLogger      # noqa: E402
 

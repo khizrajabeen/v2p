@@ -9,9 +9,9 @@ the files describe the same sample.
 Standard library only - runs before you install anything.
 
 Usage:
-  python scripts/00_inspect_inputs.py data/*            # everything
-  python scripts/00_inspect_inputs.py data/ ref/        # directories too
-  python scripts/00_inspect_inputs.py --json data/      # machine-readable
+  python src/v2p/stages/00_inspect_inputs.py data/*            # everything
+  python src/v2p/stages/00_inspect_inputs.py data/ ref/        # directories too
+  python src/v2p/stages/00_inspect_inputs.py --json data/      # machine-readable
 """
 
 from __future__ import annotations

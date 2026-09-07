@@ -25,7 +25,7 @@ for f in "$GENOME" "$GTF" "$UNIPROT"; do
 done
 
 echo "=== 1/6  parse inputs ==="
-python3 scripts/01_parse_inputs.py \
+python3 src/v2p/stages/01_parse_inputs.py \
     --vcf    data/sSNV_sIndel.vcf.gz \
     --res    data/HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt \
     --fusion data/HCC1395_high_confidence_Fusion_genes_all.csv \
@@ -33,12 +33,12 @@ python3 scripts/01_parse_inputs.py \
     --outdir results >/dev/null 2>&1
 
 echo "=== 2/6  input QC ==="
-python3 scripts/03_qc_report.py \
+python3 src/v2p/stages/03_qc_report.py \
     --manifest results/tables/unified_variant_manifest.tsv \
     --outdir results >/dev/null 2>&1
 
 echo "=== 3/6  translate (all transcripts, keeping everything) ==="
-python3 scripts/02_build_protein_fasta.py \
+python3 src/v2p/stages/02_build_protein_fasta.py \
     --manifest results/tables/unified_variant_manifest.tsv \
     --genome "$GENOME" --gtf "$GTF" --uniprot "$UNIPROT" \
     --header-style uniprot \
@@ -56,18 +56,18 @@ VALARGS=(--uniprot "$UNIPROT"
          --recoding results/tables/res_recoding_sites.tsv
          --protein-fasta "$BUILT" --outdir results)
 [ -f "$GENCODE_PROT" ] && VALARGS+=(--gencode-translations "$GENCODE_PROT")
-python3 scripts/04_validate_uniprot.py "${VALARGS[@]}" >/dev/null 2>&1 || {
+python3 src/v2p/stages/04_validate_uniprot.py "${VALARGS[@]}" >/dev/null 2>&1 || {
   echo "VALIDATION FAILED — see results/qc/uniprot_validation.md"; exit 1; }
 grep -E "Exact-agreement|Same-protein" results/qc/uniprot_validation.md || true
 
-python3 scripts/08_recovery_report.py \
+python3 src/v2p/stages/08_recovery_report.py \
     --manifest results/tables/unified_variant_manifest.tsv \
     --disposition results/tables/disposition.benchmark.tsv \
     --outdir results >/dev/null 2>&1
 
 echo "=== 5/6  package ==="
 rm -rf "$OUT"
-python3 scripts/06_package_release.py \
+python3 src/v2p/stages/06_package_release.py \
     --fasta "$BUILT" --uniprot "$UNIPROT" \
     --name "$NAME" --outdir "$OUT" \
     --decoy pseudo_reverse --split-by-class --append-reference \

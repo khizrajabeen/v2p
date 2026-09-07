@@ -1,268 +1,207 @@
-# HCC1395 variant → amino-acid sequence conversion
+# v2p — variant calls to protein sequences
 
-Converts the HCC1395 high-confidence variant package into a single protein
-FASTA in which every entry carries its variant-type annotation.
+v2p turns genomic and transcriptomic variant calls into an amino-acid
+sequence database for mass-spectrometry search, and records what happened
+to every input variant. It reads somatic SNVs and indels, A-to-I RNA
+editing tables, gene fusion calls and alternative-splicing events, and
+emits one coherent FASTA with a shared header vocabulary. It exists
+because no other tool covers those four evidence types together: RNA
+editing produces proteoforms with no genomic basis, so they are invisible
+to any DNA-driven pipeline, and fusions and splicing normally need
+separate pipelines whose outputs nobody reconciles. Every variant that
+does *not* produce a protein gets a recorded reason, because silence is
+where wrong answers hide.
 
-Handles four evidence types:
+## Where it sits
 
-| input file | variant type | records received |
-|---|---|---:|
-| `high-confidence_sSNV_sIndel_v1...vcf` | somatic SNV / InDel | **not yet received** |
-| `HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt` | RNA editing (A-to-I) | 8,093 |
-| `HCC1395_high_confidence_Fusion_genes_all.csv` | gene fusion | 28 |
-| `HCC1395_high_confidence_AS-LR_v1.csv` | alternative splicing | 1,027 |
+| tool | year | language | small variants | splice junctions | RNA editing | fusions | non-canonical ORFs | status |
+|---|---|---|---|---|---|---|---|---|
+| customProDB | 2013 | R | yes | yes | no | no | no | unmaintained |
+| QUILTS | 2016 | Python | yes | yes | no | no | partial | dormant |
+| ProteoDisco | 2021 | R/Bioconductor | yes | yes | no | no | no | maintained |
+| pypgatk / pgdb | 2021 | Python | yes | no | no | no | **yes** (3-frame) | maintained |
+| **v2p** | — | Python | yes | yes | **yes** | **yes** | no | this repo |
 
----
+The claim worth making, and only this one: the first tool to build a single
+protein database from DNA variants, RNA editing, fusions and splicing
+together, with every input variant's fate recorded. Not "more accurate" —
+that needs a published benchmark this repo does not yet have. Not "better
+than VEP" — VEP is not a database builder. Three-frame translation of
+non-coding transcripts is a real gap where pypgatk is ahead.
 
-## Status
-
-| stage | needs reference? | state |
-|---|---|---|
-| 0 `00_fetch_references.sh` | — | ready to run |
-| 1 `01_parse_inputs.py` | no | **already run**, 9,148 records in `results/tables/` |
-| 2 `02_build_protein_fasta.py` | **yes** (hg38 + GENCODE) | code complete, 28/28 tests pass, integration-tested end to end |
-| 3 `03_qc_report.py` | no | **already run**, `results/qc/summary.md` |
-| 4 `04_validate_uniprot.py` | UniProt only | check A **already run** (19/25 sites anchored); check B pending stage 2 |
-| 5 `05_compare_tools.py` | tool outputs | ready; see `docs/PLAN.md` |
-
-Stage 2 is the only step still to execute and it needs a ~4 GB reference
-download, so it must run on your machine rather than in this session.
-
----
-
-## Quick start
+## Install
 
 ```bash
-pip install -r requirements.txt
-python tests/test_pipeline.py          # 28 assertions, ~2 s, no reference needed
+pip install .
+```
+
+Python 3.10–3.13. The only runtime dependency is `pyfaidx`.
+
+Then fetch the references once (~18 GB, GENCODE v44 + GRCh38):
+
+```bash
 bash scripts/00_fetch_references.sh ref/
-make all GENOME=ref/GRCh38.primary_assembly.genome.fa \
-         GTF=ref/gencode.v44.annotation.gtf.gz \
-         VCF=data/high-confidence_sSNV_sIndel_v1.sort.final.combined.sort.vcf
 ```
 
-Or step by step:
+## Quickstart
+
+`examples/` holds a small synthetic input folder that ships with the repo,
+so this works immediately after cloning:
 
 ```bash
-python scripts/01_parse_inputs.py \
-    --vcf    data/high-confidence_sSNV_sIndel_v1.sort.final.combined.sort.vcf \
-    --res    data/HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt \
-    --fusion data/HCC1395_high_confidence_Fusion_genes_all.csv \
-    --as-lr  data/HCC1395_high_confidence_AS-LR_v1.csv \
-    --outdir results
-
-python scripts/03_qc_report.py --manifest results/tables/unified_variant_manifest.tsv
-
-python scripts/02_build_protein_fasta.py \
-    --manifest results/tables/unified_variant_manifest.tsv \
-    --genome   ref/GRCh38.primary_assembly.genome.fa \
-    --gtf      ref/gencode.v44.annotation.gtf.gz \
-    --header-style peff \
-    --include-reference \
-    --outdir   results
+v2p detect examples/
 ```
 
----
-
-## Method
-
-### Small variants (SNV / MNV / InDel) and RNA editing
-
-The variant is applied to the **mature transcript** sequence, not to genomic
-sequence. One code path therefore serves both DNA variants and RNA editing:
-an A-to-I edit is indistinguishable from a genomic A>G at the transcript
-level, and a minus-strand gene's genomic `T>C` becomes a transcript-level
-`A>G` automatically once exon blocks are reverse-complemented. (8,093 of
-8,093 sites in the RES file are A>G or T>C, exactly as A-to-I editing
-predicts — see `results/qc/summary.md`.)
-
-Steps: locate the variant on the transcript → verify the observed reference
-base matches the call (mismatches are **flagged, never silently accepted**) →
-splice in the alternative allele → translate from the annotated start codon
-to the first stop. Frameshifts translate past the annotated stop into the
-3′UTR, which is where the novel peptide lives.
-
-Consequences assigned: `synonymous`, `missense`, `stop_gained`, `stop_lost`,
-`start_lost`, `inframe_insertion`, `inframe_deletion`, `frameshift`.
-Variants that are intronic or that span a splice junction on a given
-transcript yield no protein for that transcript.
-
-### Fusions
-
-The table gives genomic breakpoints without partner strand or transcript
-context, so the builder picks a representative coding transcript per partner,
-takes the 5′ partner's transcript up to the breakpoint and the 3′ partner's
-from the breakpoint onward. A breakpoint inside an intron **snaps to the
-flanking exon boundary**, which is the junction that would actually be
-spliced. Both partner orientations are attempted, because fusion tables do
-not consistently order partners 5′→3′; downstream you can keep whichever
-orientation produces a viable ORF.
-
-Two frame flags are reported separately, because they are not the same thing:
-
-- `junction_on_codon_boundary` — the 5′ partner's reading frame is intact at
-  the junction;
-- `3p_native_frame` / `3p_frameshifted` — whether the 3′ partner continues in
-  **its own** native frame. This is the flag that matters for a fusion
-  neoantigen; only when both hold is the record labelled `in_frame_fusion`.
-
-### Alternative splicing
-
-Two strategies, in order:
-
-1. **Junction matching (preferred).** Each SUPPA2 event id defines the intron
-   junctions separating the two alternative forms. Annotated coding
-   transcripts of that gene containing the required junctions are selected
-   and translated as-is. Nothing is invented — the sequences are real
-   GENCODE isoforms, which keeps spurious peptides out of the search space.
-2. **De novo construction (fallback, SE/RI/A3/A5 only).** If no annotated
-   transcript carries the junction — the interesting, tumour-specific case —
-   the representative transcript's exon chain is edited to realise the event
-   and translated from the first viable ATG. These records are flagged
-   `constructed_isoform` and carry `constructed=1` so you can filter or
-   weight them separately.
-
-SUPPA2 coordinate grammar implemented (validated against the real event ids
-in your file):
-
 ```
-SE  <e1>-<s2> : <e2>-<s3>
-A5  <e1>-<s3> : <e2>-<s3>
-A3  <e1>-<s2> : <e1>-<s3>
-RI  <s1> : <e1>-<s2> : <e2>
-MX  <e1>-<s2> : <e2>-<s4> : <e1>-<s3> : <e3>-<s4>
-AF  <s1> : <e1>-<s3> : <s2> : <e2>-<s3>
-AL  <e1>-<s2> : <e2> : <e1>-<s3> : <e3>
+gene fusion calls                        fusions.csv
+RNA editing sites                        rna_editing.txt
+somatic SNV / InDel calls                small_variants.vcf
+alternative splicing events              splicing.csv
+genome build                             GRCh38
 ```
 
-Group arity is checked against the grammar; a mismatch raises a warning
-rather than being misread.
+With the references in place, the whole conversion is one command:
 
----
-
-## Output format
-
-Four interchangeable header styles (`--header-style`). **`uniprot` is the
-default choice for this project**, since it reproduces the grammar and the
-single-line layout of the supplied `Human_Homo_sapiens_uniprot_SP_...fasta`
-template exactly. All four carry the variant type. Full field reference in [`docs/FORMAT_SPEC.md`](docs/FORMAT_SPEC.md).
-
-**`peff`** — PSI Extended FASTA Format, the ratified HUPO-PSI standard for
-encoding sequence variants in FASTA. Supported by Comet, neXtProt, UniProtKB:
-
-```
->HCC1395:GRIA2_NM_000826_chr4_157336723_A_G \DbUniqueId=... \PName=GRIA2 RNA editing site (A-to-I)
- \GName=GRIA2 \TaxName=Homo sapiens \NcbiTaxId=9606 \Length=883 \VariantSimple=(607|R)
- \VariantType=RNA_EDITING \Consequence=missense \TranscriptId=NM_000826
- \ProteinChange=p.Q607R \GenomicLocus=chr4:157336723A>G \NovelSpan=607-607
- \EvidenceSource=RES_ANNOVAR
+```bash
+v2p run examples/ --ref ref/ --outdir out/ --name EXAMPLE --logdir logs/
 ```
 
-**`descriptive`** — pipe/key-value, safest default with arbitrary search engines:
+It prints the invariant report and exits non-zero if the release
+contradicts itself. Keep `--logdir` outside `--outdir`: `MANIFEST.txt` is
+written last, so anything added to the release afterwards makes it stale.
 
+The example calls are synthetic calls at real coordinates — nothing is
+redistributed from the HCC1395 package. `examples/make_examples.py`
+regenerates them: substitutions are placed in the CDS of named genes with
+the reference allele read from the genome, and the ADAR sites are derived
+from the annotation rather than quoted (see Validation).
+
+## Validation
+
+- **GENCODE agreement 100%** on the single-transcript build — reference
+  proteins translated by this pipeline compared against GENCODE's own
+  translations of the same transcript ids. 97.3% on the all-transcript
+  build; the difference is `cds_end_NF` transcripts, where GENCODE
+  truncates at the annotated CDS end and v2p reads to the first stop.
+  This is the correctness gate, not UniProt: UniProt and GENCODE choose
+  canonical isoforms independently and often disagree on the start codon.
+- **Nonsynonymous:synonymous ratio 2.75**, within the expected range.
+- **ADAR positive controls recovered**: GRIA2 Q607R, NEIL1 K242R,
+  BLCAP Y2C, CDK13 Q103R, COG3 I635V. Their coordinates in
+  `benchmarks/truth/editing_sites.tsv` are *derived*, not quoted: for each
+  published protein change the codon is located in the GENCODE v44
+  representative transcript, and the row is written only if a single A→G
+  in that codon reproduces the published substitution and the genome base
+  matches the expected strand.
+- **200 tests**, all offline, no reference download, seconds to run:
+  93 pipeline, 80 release-invariant, 27 config.
+- **Nine release invariants** run before `v2p run` reports success, and
+  any error-severity violation exits non-zero. On the HCC1395 dataset the
+  release reports zero errors.
+- **Reproducibility**: two runs from one config produce a byte-identical
+  release tree, verified with `diff -r` over the entire output including
+  `MANIFEST.txt`.
+
+```bash
+make test              # 200 assertions, no reference needed
+make reproducibility   # double-run byte-identity, needs the references
 ```
->HCC1395|GRIA2_NM_000826_chr4_157336723_A_G VT=RNA_EDITING CSQ=missense GN=GRIA2 ...
-```
 
-**`pvac`** — compact neoantigen-pipeline style: `>MT.GRIA2.NM_000826.RNA_EDITING.missense.Q607R`
+## How it works
 
-A companion `results/tables/protein_records.tsv` gives one row per FASTA
-entry for joins and QC.
+Variants are applied to the **mature transcript**, not to genomic
+sequence. That is what lets one code path serve DNA variants and RNA
+editing: an A-to-I edit is indistinguishable from a genomic A>G at
+transcript level. Translation runs from the annotated start codon to the
+first stop; frameshifts translate past the annotated stop into the 3′ UTR.
 
-`--include-reference` additionally emits the unmodified reference protein of
-each affected transcript. Recommended for MS database search: without the
-wild-type counterpart you cannot tell a genuine variant peptide from a
-mis-assigned one.
+Genomic coordinates are 1-based inclusive; transcript and CDS offsets are
+0-based from the 5′ end in transcription direction. Every conversion goes
+through `annotation.py` so the convention lives in one place. The genetic
+code is hard-coded in `seqops.py` on purpose — a library update must not
+be able to change a translation silently.
 
----
+Transcript selection ties break deterministically: MANE_Select →
+Ensembl_canonical → basic → longest CDS → longest transcript →
+lexicographic id.
 
-## Reproducibility
+## Limitations and what is unverified
 
-Every stage writes two files to `logs/`:
+**Not implemented.** Non-canonical ORFs (three-frame translation of
+lncRNAs and pseudogenes) — the one capability where pypgatk is genuinely
+ahead. Species independence: `_HUMAN` entry names, `OS=Homo sapiens
+OX=9606` and GRCh38 contig lengths are still hard-coded, so this is a
+human-only tool today. There is no benchmark runner: `benchmarks/truth/`
+holds the truth data but no script consumes it, so no precision or recall
+figure has been computed and no accuracy claim is made.
 
-- `<stage>.<run_id>.log` — timestamped operation log
-- `<stage>.<run_id>.provenance.json` — command line, working directory,
-  Python version, platform, git commit, full `pip freeze`, all parameters,
-  and **SHA-256 of every input and output**
+**Unverified.** The GitHub Actions workflow has never executed — it will
+run on first push and prove itself or not. The `Dockerfile` has never been
+built; treat it as a starting point, not a tested artefact. There is no
+conda recipe: one was written and then deleted unbuilt, rather than
+shipped untested.
 
-Determinism: no randomness anywhere in the pipeline. Transcript selection
-ties break on `MANE_Select` → `Ensembl_canonical` → `basic` tag → longest
-CDS → longest transcript → lexicographic transcript id, so the same inputs
-always give byte-identical output. The genetic code is hard-coded in
-`src/v2p/seqops.py` rather than imported, so a library update cannot silently
-change a translation.
+**Truth set.** `benchmarks/truth/cosmic_variants.tsv` holds 336 ClinVar
+variants, each with its VCV accession and version, GRCh38 throughout, and
+every REF allele independently re-read from the genome and confirmed. What
+is *not* established is that each expected protein consequence is right in
+the sense a benchmark needs — ClinVar's own annotation is taken at face
+value, and 73 of the 336 rows carry "no assertion criteria provided". Use
+it accordingly.
 
-Input checksums recorded for this run:
+**Bugs found and fixed during development.** Every one produced
+plausible-looking *wrong output* rather than an error, and none was caught
+by looking at the sequences. Each has a regression test.
 
-```
-5b8245c5...  HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt
-232b7192...  HCC1395_high_confidence_Fusion_genes_all.csv
-064ef665...  HCC1395_high_confidence_AS-LR_v1.csv
-```
+| bug | effect |
+|---|---|
+| transcripts looked up by gene symbol only | 33,221 sites-only VCF variants produced zero proteins |
+| minus-strand AF/AL events dropped | 234 of 1,027 splicing events silently skipped |
+| GTF frame column parsed, never used | 8,260 `cds_start_NF` transcripts translated out of frame |
+| selenocysteine annotation ignored | all 25 selenoproteins truncated at their first UGA |
+| mitochondrial code not applied | chrM would read through its real stops |
+| UTR variants classified as synonymous | inverted the nonsyn:syn ratio; 16 indels shipped as false frameshifts |
+| ambiguous gene symbols resolved by name | silent false negatives on paralogous loci |
+| double-counted wild-types across files | per-type files did not sum to the combined file |
+| `v2p run --ref` ignored the reference directory | the documented invocation always refused without `--force` |
+| `--logdir` reached only the invariant logger | one run's provenance scattered across two directories |
 
----
-
-## Testing
-
-`python tests/test_pipeline.py` — 28 assertions, no reference download needed.
-
-`tests/make_fixture.py` builds a miniature genome with three genes (one `+`
-strand, one `−` strand, one fusion partner). The transcript is constructed
-first and then *placed* into the contigs, so the expected protein for every
-test case is known by construction rather than by trusting the code. Covered:
-plus- and minus-strand missense, minus-strand A-to-I recoding, synonymous,
-stop-gained, 1 bp frameshift, in-frame 3 bp deletion and insertion, intronic
-null result, reference-mismatch flagging, fusion junction indexing, intronic
-breakpoint snapping, 3′-partner frame detection, SUPPA2 grammar parsing, and
-FASTA round-trip in all three header styles.
-
----
-
-## Limitations — read before using the output
-
-1. **Isoform choice.** Default `--transcript-mode representative` gives one
-   protein per gene. `--transcript-mode all` covers every coding transcript;
-   it multiplies database size by roughly 4–6× and inflates the FDR of a
-   downstream MS search. Choose deliberately.
-2. **Alternative splicing is transcript-level, not proteoform-level.** AF
-   events (624 of 1,027, the majority) change the N-terminus and therefore
-   the start codon; where no annotated transcript matches, the start codon is
-   inferred as the first viable ATG and flagged
-   `start_codon_inferred_first_ATG`. Treat those with caution.
-3. **RNA-editing haplotypes are not phased.** Each site is applied
-   independently. Two edits in one codon would need co-occurrence data that
-   is not in the input file.
-4. **No NMD prediction.** A frameshift or stop-gain >50 nt upstream of the
-   last exon-exon junction is likely degraded and may never yield protein.
-   The records are emitted anyway and flagged; filter downstream if you want
-   NMD-escaping products only.
-5. **Selenoproteins truncate at UGA.** Table 1 is applied without
-   recoding, so any selenoprotein is cut short at the first in-frame UGA.
-6. **Reference build must be GRCh38.** The stage-0 script asserts
-   `chr1 == 248,956,422 bp` before you spend an hour translating; a GRCh37
-   reference produces silently wrong codons rather than an error.
-7. **Fusion transcripts are representative reconstructions.** They are built
-   from breakpoints plus annotation, not from assembled long reads. If the
-   long-read assemblies behind `Type=LR` calls exist, translating those
-   directly is more accurate.
-
----
+An eleventh, found while writing the examples: four of the five ADAR
+coordinates first written from memory were wrong. They are now derived
+from the annotation, and the derivation fails loudly rather than guessing.
 
 ## Layout
 
 ```
-src/v2p/
-  provenance.py     run logging, checksums, environment capture
-  seqops.py         genetic code, translation, ORF and HGVS utilities
-  annotation.py     GTF transcript models, genome access, coordinate mapping
-  fasta.py          header-style registry and FASTA/TSV writers
-  parse/inputs.py   VCF, ANNOVAR, fusion and SUPPA2 parsers
-  build/smallvar.py SNV / InDel / RNA-editing → protein
-  build/fusion.py   chimeric transcript construction → protein
-  build/splicing.py AS event → isoform protein
-scripts/            00 fetch refs, 01 parse, 02 build FASTA, 03 QC
-tests/              fixture generator + test suite
-results/            manifest, QC tables, FASTA output
-logs/               operation logs + provenance JSON
-docs/               format specification
+src/v2p/        cli.py config.py discover.py invariants.py
+                annotation.py seqops.py nmd.py peptides.py validate.py fasta.py
+                provenance.py  parse/  build/  stages/
+tests/          test_pipeline.py test_invariants.py test_config.py
+docs/           BUILD_SPEC.md TOOL_DESIGN.md FORMAT_SPEC.md
+examples/       synthetic input, works after clone
+benchmarks/     truth data (no runner yet)
+config/         params.yaml — generated, and tested to load
 ```
+
+The numbered pipeline stages live in `src/v2p/stages/` so a pip-installed
+v2p can find them. Each is a separate process so it records its own
+provenance JSON — inputs with checksums, parameters, counters, environment.
+
+## Citation
+
+A paper is not yet written. If you use v2p before then, please cite the
+repository and the exact commit:
+
+```
+v2p: variant calls to protein sequences. https://github.com/<owner>/v2p
+Version 1.0.0, commit <sha>.
+```
+
+See `CITATION.cff`.
+
+## Licence
+
+**Not yet chosen.** The copyright holder is being confirmed; until a
+`LICENSE` file lands, no licence is granted and the default of "all rights
+reserved" applies. `pyproject.toml` and `CITATION.cff` carry TODOs marking
+the same gap.

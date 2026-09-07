@@ -1,0 +1,4 @@
+tag,Gene1,Gene2,Type,Validated,confidence,breakpoint1,breakpoint2
+BCR--ABL1,BCR,ABL1,SR;LR,yes,0.99,chr22:23290413,chr9:130854064
+EML4--ALK,EML4,ALK,SR;LR,yes,0.97,chr2:42295516,chr2:29223528
+TMPRSS2--ERG,TMPRSS2,ERG,SR,yes,0.91,chr21:41508081,chr21:38445621

@@ -5,7 +5,7 @@ Requires a reference genome FASTA (hg38/GRCh38, same build as the input
 calls) and a matching GENCODE/Ensembl GTF.
 
 Usage:
-  python scripts/02_build_protein_fasta.py \
+  python src/v2p/stages/02_build_protein_fasta.py \
       --manifest results/tables/unified_variant_manifest.tsv \
       --genome   ref/GRCh38.primary_assembly.genome.fa \
       --gtf      ref/gencode.v44.annotation.gtf.gz \
@@ -21,7 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.annotation import Annotation, Genome            # noqa: E402
 from v2p.build.fusion import build_fusion_proteins       # noqa: E402

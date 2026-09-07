@@ -36,24 +36,44 @@ from v2p.provenance import RunLogger
 # source checkout and an installed package, and guessing wrong produces a
 # confusing "No such file" from deep inside a subprocess, so resolve it
 # once and say plainly what was searched.
-_STAGE_CANDIDATES = (
-    Path(__file__).resolve().parent / "stages",        # installed wheel
-    Path(__file__).resolve().parents[2] / "scripts",   # source checkout
-)
+_SENTINEL = "01_parse_inputs.py"
+
+
+def _stage_candidates() -> list[Path]:
+    """Where the stage scripts might be, best source first.
+
+    `importlib.resources` is the supported way to find a file that ships
+    inside a package, and it is what makes an installed wheel work. The
+    repo-layout fallback is for running straight from a checkout where the
+    package has not been installed at all.
+    """
+    cands: list[Path] = []
+    try:
+        from importlib.resources import files
+        cands.append(Path(str(files("v2p.stages"))))
+    except (ImportError, ModuleNotFoundError, TypeError):
+        # A zipimported or otherwise non-filesystem package has no usable
+        # path. Fall through to the layout probes rather than failing here.
+        pass
+    here = Path(__file__).resolve()
+    cands.append(here.parent / "stages")            # src/v2p/stages
+    cands.append(here.parents[2] / "scripts")       # pre-1.0 checkout layout
+    return cands
 
 
 def stage_dir() -> Path:
     """Directory holding the numbered pipeline stage scripts."""
-    for cand in _STAGE_CANDIDATES:
-        if (cand / "01_parse_inputs.py").is_file():
+    cands = _stage_candidates()
+    for cand in cands:
+        if (cand / _SENTINEL).is_file():
             return cand
-    searched = "\n  ".join(str(c) for c in _STAGE_CANDIDATES)
     raise FileNotFoundError(
         "cannot find the v2p pipeline stage scripts. Searched:\n  "
-        + searched
-        + "\n\nRunning from a source checkout works. A pip-installed "
-          "v2p does not yet ship the stage scripts - see the note in "
-          "pyproject.toml.")
+        + "\n  ".join(str(c) for c in cands)
+        + f"\n\nExpected to find {_SENTINEL} in one of these. If you are "
+          "running from a source checkout, run from the repository root; if "
+          "from an installed package, the install is incomplete - reinstall "
+          "with `pip install v2p`.")
 
 
 def _run(script: str, args: list[str], quiet: bool = False,

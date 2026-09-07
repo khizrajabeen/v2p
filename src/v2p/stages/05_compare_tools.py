@@ -17,7 +17,7 @@ Optionally restricts to variant-proximal k-mers only, since agreement on
 shared reference regions is uninformative.
 
 Usage:
-  python scripts/05_compare_tools.py \
+  python src/v2p/stages/05_compare_tools.py \
       --fasta ours=results/fasta/HCC1395_variant_proteins.uniprot.fasta \
       --fasta vep=vep_out/mutated.fa \
       --fasta pgatk=pgatk_out/variants.fa \
@@ -34,7 +34,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.provenance import RunLogger      # noqa: E402
 

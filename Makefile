@@ -44,19 +44,19 @@ refs:
 parse: $(MANIFEST) qc
 
 $(MANIFEST):
-	python3 scripts/01_parse_inputs.py $(VCFARG) \
+	python3 src/v2p/stages/01_parse_inputs.py $(VCFARG) \
 	  --res    $(DATA)/HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt \
 	  --fusion $(DATA)/HCC1395_high_confidence_Fusion_genes_all.csv \
 	  --as-lr  $(DATA)/HCC1395_high_confidence_AS-LR_v1.csv \
 	  --outdir $(OUT)
 
 qc: $(MANIFEST)
-	python3 scripts/03_qc_report.py --manifest $(MANIFEST) --outdir $(OUT)
+	python3 src/v2p/stages/03_qc_report.py --manifest $(MANIFEST) --outdir $(OUT)
 
 MODE  ?= representative
 
 fasta: $(MANIFEST)
-	python3 scripts/02_build_protein_fasta.py \
+	python3 src/v2p/stages/02_build_protein_fasta.py \
 	  --manifest $(MANIFEST) --genome $(GENOME) --gtf $(GTF) \
 	  --uniprot $(UNIPROT) --header-style $(STYLE) --transcript-mode $(MODE) \
 	  --include-reference --outdir $(OUT)
@@ -67,7 +67,7 @@ fasta: $(MANIFEST)
 both: $(MANIFEST)
 	$(MAKE) fasta MODE=representative
 	$(MAKE) fasta MODE=all
-	python3 scripts/05_compare_tools.py \
+	python3 src/v2p/stages/05_compare_tools.py \
 	  --fasta representative=$(OUT)/fasta/HCC1395_variant_proteins.$(STYLE).representative.fasta \
 	  --fasta all_transcripts=$(OUT)/fasta/HCC1395_variant_proteins.$(STYLE).all.fasta \
 	  --k 9 --outdir $(OUT)
@@ -80,13 +80,13 @@ UNIPROT ?= ref/uniprot_human_SP.fasta
 
 .PHONY: validate compare
 validate:
-	python3 scripts/04_validate_uniprot.py --uniprot $(UNIPROT) \
+	python3 src/v2p/stages/04_validate_uniprot.py --uniprot $(UNIPROT) \
 	  --recoding $(OUT)/tables/res_recoding_sites.tsv \
 	  $(if $(wildcard $(OUT)/fasta/*.fasta),--protein-fasta $(firstword $(wildcard $(OUT)/fasta/*.fasta)),) \
 	  --outdir $(OUT)
 
 compare:
-	python3 scripts/05_compare_tools.py \
+	python3 src/v2p/stages/05_compare_tools.py \
 	  --fasta ours=$(OUT)/fasta/HCC1395_variant_proteins.uniprot.fasta \
 	  --fasta vep=vep_out/mutated.fa \
 	  --fasta agfusion=agf_out/all_fusion_proteins.fa \

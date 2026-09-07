@@ -10,7 +10,7 @@ Reference-free. Produces:
                                      produce, so stage 2 output can be checked
 
 Usage:
-  python scripts/03_qc_report.py --manifest results/tables/unified_variant_manifest.tsv
+  python src/v2p/stages/03_qc_report.py --manifest results/tables/unified_variant_manifest.tsv
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.parse.inputs import AS_TYPES        # noqa: E402
 from v2p.provenance import RunLogger         # noqa: E402

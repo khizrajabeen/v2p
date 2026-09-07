@@ -1,0 +1,15 @@
+# v2p benchmark truth set - A-to-I RNA editing recoding sites
+# The canonical ADAR recoding sites. No competing tool accepts an
+# editing table, so this category is unique to v2p.
+# Coordinates are DERIVED, not quoted: for each published protein
+# change the codon is located in the GENCODE v44 representative
+# transcript, and the site is written only if a single A->G in that
+# codon reproduces the published substitution and the genome base
+# matches the expected strand. See verification_method per row.
+# Verified rows: 5 of 5.
+chrom	pos	ref	alt	gene	transcript	expected_hgvs_p	consequence_class	assembly	source	source_version	verification	verification_method
+chr4	157336723	A	G	GRIA2	ENST00000264426.14	p.Q607R	missense	GRCh38	Sommer et al. 1991 Cell 67:11 (PMID 1717158)	GENCODE v44	verified	derived from GENCODE GRIA2 ENST00000264426.14 codon 607: CAG->CGG = Q->R
+chr15	75353745	A	G	NEIL1	ENST00000355059.9	p.K242R	missense	GRCh38	Yeo et al. 2010 RNA 16:1304 (PMID 20504954)	GENCODE v44	verified	derived from GENCODE NEIL1 ENST00000355059.9 codon 242: AAA->AGA = K->R
+chr20	37519170	T	C	BLCAP	ENST00000373537.7	p.Y2C	missense	GRCh38	Galeano et al. 2010 Oncogene 29:4section (PMID 20802519)	GENCODE v44	verified	derived from GENCODE BLCAP ENST00000373537.7 codon 2: TAT->TGT = Y->C
+chr7	39950949	A	G	CDK13	ENST00000181839.10	p.Q103R	missense	GRCh38	Li et al. 2009 Science 324:1210 (PMID 19478186)	GENCODE v44	verified	derived from GENCODE CDK13 ENST00000181839.10 codon 103: CAG->CGG = Q->R
+chr13	45516236	A	G	COG3	ENST00000349995.10	p.I635V	missense	GRCh38	Levanon et al. 2005 NAR 33:1162 (PMID 15731336)	GENCODE v44	verified	derived from GENCODE COG3 ENST00000349995.10 codon 635: ATT->GTT = I->V

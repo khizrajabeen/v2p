@@ -16,11 +16,11 @@ Two independent checks:
 
 Usage:
   # check A only, runs today
-  python scripts/04_validate_uniprot.py --uniprot ref/uniprot_human_SP.fasta \
+  python src/v2p/stages/04_validate_uniprot.py --uniprot ref/uniprot_human_SP.fasta \
       --recoding results/tables/res_recoding_sites.tsv
 
   # A + B, after stage 2
-  python scripts/04_validate_uniprot.py --uniprot ref/uniprot_human_SP.fasta \
+  python src/v2p/stages/04_validate_uniprot.py --uniprot ref/uniprot_human_SP.fasta \
       --recoding results/tables/res_recoding_sites.tsv \
       --protein-fasta results/fasta/HCC1395_variant_proteins.uniprot.fasta
 """
@@ -34,7 +34,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.provenance import RunLogger        # noqa: E402
 from v2p.validate import (                  # noqa: E402

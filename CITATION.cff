@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: >-
+  If you use v2p in work you publish, please cite the repository and the
+  exact commit you ran. There is no paper yet; when there is, this file
+  will name it as the preferred citation.
+title: "v2p: variant calls to protein sequences"
+abstract: >-
+  v2p converts genomic and transcriptomic variant calls into an amino-acid
+  sequence database for mass-spectrometry search. It ingests somatic SNVs
+  and indels, A-to-I RNA editing tables, gene fusion calls and
+  alternative-splicing events into one database with a shared header
+  vocabulary, and records a disposition for every input variant, including
+  the ones that produce no protein.
+version: 1.0.0
+date-released: "2026-09-07"
+type: software
+
+# TODO(owner): confirm before publishing. The copyright holder is being
+# confirmed and there is no LICENSE file yet, so this placeholder must be
+# replaced with the real author list. GitHub renders this file as a
+# "Cite this repository" button, so a wrong name here is a wrong citation
+# in someone else's paper.
+authors:
+  - name: "TODO: confirm author list before publishing"
+
+# TODO(owner): set once the licence is chosen. Must match LICENSE and the
+# license field in pyproject.toml.
+# license: MIT
+
+repository-code: "https://github.com/OWNER/v2p"
+
+keywords:
+  - proteogenomics
+  - variant calling
+  - RNA editing
+  - gene fusion
+  - alternative splicing
+  - mass spectrometry
+  - protein database

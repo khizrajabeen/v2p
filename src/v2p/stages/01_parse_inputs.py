@@ -5,7 +5,7 @@ Reference-free: runs without a genome FASTA or GTF, so it can be executed
 immediately to audit the input package before the translation stage.
 
 Usage:
-  python scripts/01_parse_inputs.py \
+  python src/v2p/stages/01_parse_inputs.py \
       --res      data/HCC1395_high_confidence_RES_v1_addAlu_hg38_multianno.txt \
       --fusion   data/HCC1395_high_confidence_Fusion_genes_all.csv \
       --as-lr    data/HCC1395_high_confidence_AS-LR_v1.csv \
@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.parse.inputs import (  # noqa: E402
     parse_annovar_res, parse_as_events, parse_fusions, parse_vcf,
