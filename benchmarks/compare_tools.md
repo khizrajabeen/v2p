@@ -119,51 +119,34 @@ loci), so the comparison is like for like.
 
 ## ProteoDisco (R / Bioconductor)
 
-```r
-install.packages("BiocManager")
-BiocManager::install("ProteoDisco")          # record the exact version
-packageVersion("ProteoDisco")
-
-library(ProteoDisco)
-pd <- generateProteoDiscography(
-    TxDb = TxDb.Hsapiens.UCSC.hg38.knownGene::TxDb.Hsapiens.UCSC.hg38.knownGene,
-    genomeSeqs = BSgenome.Hsapiens.UCSC.hg38::BSgenome.Hsapiens.UCSC.hg38)
-pd <- importGenomicVariants(pd, files = "bench_work/inputs/truth_variants.vcf")
-pd <- incorporateGenomicVariants(pd)
-exportProteoDiscography(pd, file = "proteodisco.fasta")
-```
-
-Note the annotation mismatch: ProteoDisco is driven from a UCSC TxDb while
-v2p uses GENCODE. Different transcript sets mean different canonical
-choices, so score on locus and protein change rather than transcript id —
-the rule `09_benchmark.py` already applies.
-
-## pypgatk (Python)
+No root is needed. `apt install r-base` wants sudo, but micromamba is a
+single binary that does not:
 
 ```bash
-pip install pypgatk                          # record the exact version
-pypgatk_cli.py --version
-
-pypgatk_cli.py vcf-to-proteindb \
-    --config_file config/vcf_config.yaml \
-    --vep_annotated_vcf bench_work/inputs/truth_variants.vcf \
-    --input_fasta gencode.v44.pc_transcripts.fa \
-    --gene_annotations_gtf ref/gencode.v44.annotation.gtf.gz \
-    --output_proteindb pypgatk.fasta
+mkdir -p mm && cd mm
+curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest     | tar -xj bin/micromamba
+export MAMBA_ROOT_PREFIX=$PWD/root
+./bin/micromamba create -y -n pd -c conda-forge -c bioconda     bioconductor-proteodisco bioconductor-genomicfeatures bioconductor-rsamtools
 ```
 
-pypgatk expects a VEP-annotated VCF and an **uncompressed** transcript
-FASTA. Annotate first with `scripts/10_vep_annotate.py`, which uses the
-Ensembl REST API and needs no local VEP cache:
+Then:
 
 ```bash
-python3 scripts/10_vep_annotate.py --vcf bench_work/inputs/truth_variants.vcf     --out-vcf truth_vep.vcf --out-tsv vep_consequences.tsv
-gunzip -k gencode.v44.pc_transcripts.fa.gz
+Rscript benchmarks/run_proteodisco.R     bench_work/inputs/truth_variants.vcf     ref/gencode.v44.annotation.gtf.gz     ref/GRCh38.primary_assembly.genome.fa     proteodisco.fasta
 ```
 
-Then pass `--annotation_field_name CSQ --consequence_str Consequence
---transcript_str Feature --biotype_str BIOTYPE`, matching the CSQ layout
-that script emits.
+**Note the deviation from the published recipe, which matters.** The usual
+invocation uses `BSgenome.Hsapiens.UCSC.hg38` and
+`TxDb.Hsapiens.UCSC.hg38.knownGene`. Those are UCSC knownGene - a
+different transcript set from the GENCODE v44 that v2p uses - so a
+comparison built on them measures the tools *and* the annotations they
+were handed, confounded. `run_proteodisco.R` builds the TxDb from the same
+GTF and reads the same genome FASTA, so all three tools see one reference.
+It is also about a gigabyte lighter.
+
+A warning from experience here: the full solve including the two
+annotation packages did not finish in fifteen minutes on this machine.
+The narrower environment above is the one to use.
 
 ## customProDB and QUILTS
 
