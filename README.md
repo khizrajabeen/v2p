@@ -114,6 +114,15 @@ from the annotation rather than quoted (see Validation).
   disagreements are listed in `benchmarks/results/benchmark.md`. Produced
   by `scripts/10_vep_annotate.py` (VEP REST, no 25 GB cache needed) then
   `09_benchmark.py --vep-consequences`.
+- **Against pypgatk 0.0.24, v2p loses on locus coverage**: 258/260
+  (99.2%) against pypgatk's 259/260 (99.6%) on the same truth loci.
+  pypgatk found one locus v2p did not; v2p found none pypgatk did not.
+  Two caveats a reader needs: the tools were not given the same input
+  (pypgatk cannot run on a sites-only VCF — it needs VEP annotation, which
+  is what told it the transcripts), and pypgatk emits no protein change,
+  so its output cannot be scored for correctness at all. Coverage and
+  correctness are different claims. Full detail, including how to
+  reproduce it, in `benchmarks/compare_tools.md`.
 - **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
   editing table, so this category has no comparator.
 - **269 tests**, all offline, no reference download, seconds to run:
@@ -151,11 +160,13 @@ lexicographic id.
 
 ## Limitations and what is unverified
 
-**Not implemented.** No comparison against ProteoDisco or
-pypgatk has been run — the benchmark scores v2p against a truth set, not
-against a competitor, so "97.3% recall" is a statement about this tool
-alone and not a claim to beat anything. `benchmarks/compare_tools.md` has
-the procedure and install commands, with the results table empty.
+**Not implemented.** ProteoDisco has not been run — it needs R,
+Bioconductor, BSgenome and a TxDb. pypgatk *has* been run and beats v2p on
+locus coverage by one variant; see above and `compare_tools.md`. Milestone
+7a (a provenance graph, one record per output sequence listing every
+contributing variant) and 7b (peptide-level provenance) are not built.
+`v2p audit` is not in CI, because it needs the 18 GB reference and the
+workflow is deliberately offline.
 
 **Unverified.** The GitHub Actions workflow has never executed — it will
 run on first push and prove itself or not. The `Dockerfile` has never been
