@@ -1,12 +1,15 @@
 # v2p — variant calls to protein sequences
 
+[![tests](https://github.com/khizrajabeen/v2p/actions/workflows/tests.yml/badge.svg)](https://github.com/khizrajabeen/v2p/actions/workflows/tests.yml)
+[![reference audit](https://github.com/khizrajabeen/v2p/actions/workflows/reference-audit.yml/badge.svg)](https://github.com/khizrajabeen/v2p/actions/workflows/reference-audit.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![assemblies](https://img.shields.io/badge/assemblies-GRCh38%20%7C%20GRCh37%20%7C%20T2T-orange)](#installation)
+
 **v2p** builds mass-spectrometry search databases from variant calls, and
 records what happened to **every** input variant — including the ones that
 produce no protein. It reads DNA variants, RNA editing, gene fusions and
 alternative splicing into one FASTA with a shared header vocabulary.
-
-Silence is where wrong answers hide, so nothing is dropped without a
-recorded reason.
 
 ## Key features
 
@@ -171,19 +174,23 @@ Detection can be bypassed per evidence type:
 
 ## Output
 
-```
-out/
-  <name>.target.fasta              the database — search this
-  <name>.target_decoy.fasta        the same, with decoys
-  <name>.entries.tsv               one row per sequence
-  <name>.summary_by_class.tsv      composition per variant type
-  by_class/                        one FASTA per variant type
-  tables/provenance.jsonl          every variant that produced each sequence
-  tables/peptide_provenance.tsv    every novel peptide and what explains it
-  qc/                              validation and recovery reports
-  METHODS.md   MANIFEST.txt
-  _work/tables/disposition.tsv     one row per INPUT variant and its fate
-```
+| file | what it is |
+|---|---|
+| `<name>.target.fasta` | the database — search this |
+| `<name>.target_decoy.fasta` | the same, with decoys appended |
+| `<name>.entries.tsv` | one row per sequence: class, gene, transcript, protein change, peptide counts |
+| `<name>.summary_by_class.tsv` | composition per variant type |
+| `by_class/` | one FASTA per variant type, so each can be searched separately |
+| `tables/provenance.jsonl` | one record per sequence, naming every variant that produced it |
+| `tables/peptide_provenance.tsv` | one row per novel peptide, and whether it spans the variant residue |
+| `_work/tables/disposition.tsv` | one row per **input** variant and its fate |
+| `qc/` | validation and per-class recovery reports |
+| `MANIFEST.txt` | SHA-256 of every file; invariant I8 verifies it against disk |
+
+`disposition.tsv` is the one people miss. Every input variant appears in
+it exactly once, including the ones that produced nothing, with the
+reason — intronic, no coding transcript, synonymous. It is the only way
+to state a recovery rate honestly.
 
 ## Measured
 
