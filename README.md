@@ -60,7 +60,7 @@ Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
 | Ensembl VEP consequence agreement | **334/334 (100%)** on shared transcripts |
 | A-to-I editing positive controls | **5/5** |
 | GENCODE translation agreement | **100%** (single-transcript build) |
-| vs pypgatk 0.0.24, locus coverage | **tied**, 259/260 each |
+| vs pypgatk 0.0.24, locus coverage | **260/260** vs 259/260 |
 | tests | **278**, offline, seconds |
 
 ```bash

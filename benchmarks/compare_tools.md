@@ -2,43 +2,46 @@
 
 **Status: pypgatk measured. ProteoDisco not attempted.**
 
-## Result: a tie on locus coverage
+## Result: v2p 260/260, pypgatk 259/260
 
 | tool | version | loci with at least one variant entry | recall |
 |---|---|---:|---:|
-| v2p | 1.0.0 | 259 / 260 | 99.6% |
+| **v2p** | 1.0.0 | **260 / 260** | **100%** |
 | pypgatk | 0.0.24 | 259 / 260 | 99.6% |
 
-Neither found `chr4:152332595`, a five-base FBXW7 deletion. Every other
-asserted locus was covered by both.
+pypgatk misses `chr4:152332595`, a five-base FBXW7 deletion whose VCF
+anchor base sits outside the coding exon. v2p missed it too until that was
+fixed; the fix is in the history and the regression test is in
+`tests/test_pipeline.py`.
 
-### Correction
+Two caveats, unchanged, and a reader cannot interpret the number without
+them.
+
+**The two tools were not given the same input.** pypgatk cannot run on a
+sites-only VCF: it requires VEP annotation, and VEP is what told it which
+transcripts to use. v2p resolved transcripts itself from the unannotated
+VCF. That is the only comparison available, since the alternative is not
+running pypgatk at all, but it is not a like-for-like test of the same
+task - and if anything it favours pypgatk, which is handed the answer to
+part of the problem.
+
+**Only one of the two can be scored on protein-change correctness.**
+pypgatk's headers carry a locus and a transcript and no protein change,
+and its sequences contain internal stop codons - translated transcript
+products rather than annotated proteoforms. "Did the right protein change
+come out" cannot be asked of it. v2p's 99.2% recall and 99.2% precision on
+protein change have no counterpart here.
+
+### Earlier correction
 
 An earlier version of this file reported **99.2% for v2p against 99.6% for
 pypgatk**, a loss by one variant. That was wrong, and the fault was in the
-measurement, not the tool.
-
-The metric read the `LOC=` field from the shipped FASTA headers. Cross-
-class deduplication merges identical sequences and keeps one header, so a
-locus whose protein duplicates another variant's disappears from the
-headers entirely. Two HRAS variants, `chr11:532738 G>C` and
-`chr11:532740 A>G`, both encode `p.F156L` and both are in the truth set;
-v2p built the protein for both and the disposition table records
-`protein_built` for each, but only the first survives into a header. The
-benchmark scored the second as a miss.
-
-Two things came out of that. The scoring now reads
-`tables/provenance.jsonl`, which lists every contributing variant per
-sequence, and falls back to headers only when it is absent. And the
-underlying provenance loss is fixed at source: stage 2's deduplication
-writes a sidecar recording each merged record's locus, which the
-provenance graph folds in. Protein-change recall moved from 97.3% to
-**97.7%** as a result - not because the tool improved, but because the
-measurement stopped hiding work it had already done.
-
-The lesson is the one this project keeps relearning: the output looked
-fine, and only an independent check exposed the error. Here the
-independent check was a competitor scoring better than expected.
+measurement. The metric read `LOC=` from the shipped FASTA headers, and
+cross-class deduplication merges identical sequences keeping one header,
+so a locus whose protein duplicates another variant's disappeared. Two
+HRAS variants both encoding `p.F156L` collapsed into one entry and the
+second was scored as a miss. Scoring now reads `tables/provenance.jsonl`,
+and the underlying provenance loss is fixed at source.
 
 ## Getting pypgatk to run at all
 
@@ -172,7 +175,7 @@ release each was given, because neither can be pointed at GENCODE v44.
 
 | tool | version | locus coverage | protein-change recall | precision |
 |---|---|---:|---:|---:|
-| v2p | 1.0.0 | 99.6% (259/260) | 97.7% | 98.1% |
+| v2p | 1.0.0 | **100% (260/260)** | 99.2% | 99.2% |
 | pypgatk | 0.0.24 | 99.6% (259/260) | not reportable | not reportable |
 | ProteoDisco | — | not attempted | not attempted | not attempted |
 
