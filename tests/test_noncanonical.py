@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from v2p.build.noncanonical import (                        # noqa: E402
-    DEFAULT_MIN_AA, NC_CLASSES, build_noncanonical_proteins,
+    DEFAULT_MIN_AA, NC_CLASSES, build_noncanonical_proteins, build_utr_orfs,
     classify_biotype, find_orfs,
 )
 from v2p.seqops import CODON_TABLE, revcomp                  # noqa: E402
@@ -171,6 +171,36 @@ def main() -> int:
     check("a minus-strand transcript finds the same ORF",
           any(x.sequence == p40
               for x in build_noncanonical_proteins([txm], FakeGenome(rc))))
+
+    # ----------------------------------------------------------- NC_UTR
+    # uORFs in the 5-prime UTR of a CODING transcript. The class existed in
+    # the vocabulary before anything emitted it; this is that gap closed.
+    class UtrTx(FakeTx):
+        def cds_offset_in_tx(self):
+            return self._cds_off
+
+    utr_nt = orf_nt(p40)                       # the uORF, 123 nt
+    cds_nt = orf_nt("M" + "ACDEFGHIK" * 3)     # the real CDS
+    full = utr_nt + cds_nt + orf_nt(p40)       # 5-prime UTR, CDS, 3-prime UTR
+    utx = UtrTx("ENSTU1", "chrN", "+", [(1, len(full))],
+                cds=[(len(utr_nt) + 1, len(utr_nt) + len(cds_nt))],
+                tx_biotype="protein_coding")
+    utx._cds_off = len(utr_nt)
+    urecs = build_utr_orfs([utx], FakeGenome(full))
+    check("NC_UTR records are produced for a coding transcript",
+          len(urecs) >= 1, f"{len(urecs)} record(s)")
+    check("every NC_UTR record is classed NC_UTR",
+          all(r.variant_class == "NC_UTR" for r in urecs))
+    check("the 5-prime uORF is found and its region recorded",
+          any(r.sequence == p40 and r.extra.get("utr") == "5_prime"
+              for r in urecs),
+          str([(len(r.sequence), r.extra.get("utr")) for r in urecs]))
+    check("the UTR region is named in the notes",
+          all(any(n.endswith("_utr_orf") for n in r.notes) for r in urecs))
+    check("the main CDS is not re-emitted as a UTR ORF",
+          all("ACDEFGHIKACDEFGHIK" not in r.sequence for r in urecs))
+    check("a non-coding transcript yields no UTR ORFs",
+          build_utr_orfs([tx], gen) == [])
 
     # ------------------------------------------------------ off by default
     from v2p.fasta import VARIANT_TYPE_VOCAB                 # noqa: E402

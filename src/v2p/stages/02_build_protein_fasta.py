@@ -29,7 +29,9 @@ from v2p.build.smallvar import (                         # noqa: E402
     ProteinRecord, build_small_variant_proteins,
 )
 from v2p.build.splicing import build_splicing_proteins   # noqa: E402
-from v2p.build.noncanonical import build_noncanonical_proteins
+from v2p.build.noncanonical import (
+    build_noncanonical_proteins, build_utr_orfs,
+)
 from v2p.species import load_species
 from v2p.fasta import (                                  # noqa: E402
     HEADER_STYLES, write_fasta, write_record_table,
@@ -343,6 +345,12 @@ def main() -> int:
         for r in nc:
             rl.count(f'noncanonical.{r.variant_class}')
         records.extend(nc)
+        utr = build_utr_orfs(ann.tx.values(), genome,
+                             min_aa=args.nc_min_aa,
+                             require_atg=not args.nc_any_start)
+        rl.log.info('UTR ORFs: %d', len(utr))
+        rl.count('noncanonical.NC_UTR', len(utr))
+        records.extend(utr)
 
     counts = write_fasta(records, fasta_path, style=args.header_style,
                          logger=rl.log, species=species)

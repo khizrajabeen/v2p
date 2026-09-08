@@ -26,6 +26,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from v2p.species import HUMAN, load_species   # noqa: E402
+
 BOLD, RESET, DIM = "\033[1m", "\033[0m", "\033[2m"
 findings: list[tuple[str, str]] = []
 
@@ -227,7 +229,7 @@ def audit_gtf(path: Path) -> None:
                           f"back to longest CDS")
 
 
-def audit_genome(path: Path) -> None:
+def audit_genome(path: Path, species=HUMAN) -> None:
     head(f"Genome FASTA — {path.name}")
     try:
         from pyfaidx import Fasta
@@ -241,18 +243,34 @@ def audit_genome(path: Path) -> None:
     style = "UCSC (chr-prefixed)" if names[0].startswith("chr") else "Ensembl"
     ok(f"contig naming: {style}")
 
-    EXPECT = {"chr1": 248956422, "chr2": 242193529, "chr17": 83257441}
-    present = [c for c in EXPECT if c in fa_raw]
-    if not present:
-        warn("check", "no primary contig named chr1/chr2/chr17 — build "
-                      "cannot be confirmed from this file")
+    # Contig lengths are the cheapest assembly check there is, but they
+    # are species-specific. An organism with none declared cannot have its
+    # assembly asserted - that is a weaker guarantee, not a failure, and
+    # saying so beats inventing an expectation we cannot check.
+    EXPECT = dict(species.contig_lengths)
+    if not EXPECT:
+        warn("check", f"no reference contig lengths are declared for "
+                      f"{species.common_name}, so the assembly cannot be "
+                      f"asserted from this file. Add contig_lengths to "
+                      f"config/species/{species.common_name}.yaml to enable "
+                      f"this check.")
     else:
-        bad = [c for c in present if len(fa_raw[c]) != EXPECT[c]]
-        if bad:
-            warn("BUG", f"contig lengths do not match GRCh38: "
-                        + ", ".join(f"{c}={len(fa_raw[c]):,}" for c in bad))
+        present = [c for c in EXPECT if c in fa_raw]
+        if not present:
+            warn("check", f"none of the expected contigs "
+                          f"({', '.join(sorted(EXPECT))}) is in this file, so "
+                          f"the {species.assembly} assembly cannot be "
+                          f"confirmed")
         else:
-            ok(f"contig lengths match GRCh38 ({', '.join(present)})")
+            bad = [c for c in present if len(fa_raw[c]) != EXPECT[c]]
+            if bad:
+                warn("BUG", f"contig lengths do not match "
+                            f"{species.assembly}: "
+                     + ", ".join(f"{c}={len(fa_raw[c]):,} "
+                                 f"(expected {EXPECT[c]:,})" for c in bad))
+            else:
+                ok(f"contig lengths match {species.assembly} "
+                   f"({', '.join(present)})")
 
     # -- assumption: soft-masking is handled -----------------------------
     probe = present[0] if present else names[0]
@@ -390,12 +408,15 @@ def main() -> int:
     ap.add_argument("--genome")
     ap.add_argument("--uniprot")
     ap.add_argument("--gencode-translations")
+    ap.add_argument("--species", default="human",
+                    help="species name or config/species/*.yaml; sets "
+                         "which contig lengths the assembly check asserts")
     args = ap.parse_args()
 
     if args.gtf:
         audit_gtf(Path(args.gtf))
     if args.genome:
-        audit_genome(Path(args.genome))
+        audit_genome(Path(args.genome), load_species(args.species))
     if args.uniprot:
         audit_uniprot(Path(args.uniprot))
     if args.gencode_translations:

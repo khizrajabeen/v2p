@@ -110,8 +110,8 @@ from the annotation rather than quoted (see Validation).
 
 - **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
   editing table, so this category has no comparator.
-- **256 tests**, all offline, no reference download, seconds to run:
-  94 pipeline, 80 release-invariant, 27 config, 27 species, 28
+- **262 tests**, all offline, no reference download, seconds to run:
+  94 pipeline, 80 release-invariant, 27 config, 27 species, 34
   non-canonical ORF.
 - **Nine release invariants** run before `v2p run` reports success, and
   any error-severity violation exits non-zero. On the HCC1395 dataset the
@@ -145,9 +145,7 @@ lexicographic id.
 
 ## Limitations and what is unverified
 
-**Not implemented.** `NC_UTR` is in the non-canonical vocabulary but
-nothing emits it: ORFs in the UTRs of coding transcripts are not searched,
-only whole non-coding transcripts. No comparison against ProteoDisco or
+**Not implemented.** No comparison against ProteoDisco or
 pypgatk has been run — the benchmark scores v2p against a truth set, not
 against a competitor, so "97.3% recall" is a statement about this tool
 alone and not a claim to beat anything. `benchmarks/compare_tools.md` has

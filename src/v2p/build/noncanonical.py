@@ -26,7 +26,8 @@ from .smallvar import ProteinRecord
 
 __all__ = [
     "NC_CLASSES", "NoncanonicalORF", "classify_biotype",
-    "find_orfs", "build_noncanonical_proteins", "DEFAULT_MIN_AA",
+    "find_orfs", "build_noncanonical_proteins", "build_utr_orfs",
+    "DEFAULT_MIN_AA",
 ]
 
 # The default floor. 30 residues is roughly the shortest stretch that can
@@ -145,6 +146,69 @@ def find_orfs(nt: str, min_aa: int = DEFAULT_MIN_AA,
     # runs - the reproducibility test depends on it.
     out.sort(key=lambda o: (-o.length, o.frame, o.nt_start))
     return out
+
+
+def build_utr_orfs(
+    transcripts, genome, min_aa: int = DEFAULT_MIN_AA,
+    require_atg: bool = True, max_per_transcript: int = 1,
+    id_prefix: str = "NC",
+) -> list[ProteinRecord]:
+    """ORFs in the UTRs of *coding* transcripts - uORFs and dORFs.
+
+    Distinct from `build_noncanonical_proteins`, which handles whole
+    non-coding transcripts. A 5-prime uORF is the better studied case:
+    they regulate translation of the main ORF and their peptides do turn
+    up in MS data, but they are invisible to any pipeline that only
+    translates the annotated CDS.
+
+    The main CDS itself is excluded - it is already emitted by the normal
+    path, and re-translating it here would duplicate every reference
+    protein under a second class.
+    """
+    records: list[ProteinRecord] = []
+    serial = 0
+    for tx in sorted(transcripts, key=lambda t: t.tx_id):
+        if not getattr(tx, "cds", None) or not tx.exons:
+            continue                     # non-coding has no UTR to speak of
+        start = tx.cds_offset_in_tx()
+        if start is None:
+            continue
+        cds_len = sum(e - s + 1 for s, e in tx.cds)
+        nt = genome.blocks(tx.chrom, tx.exons, tx.strand)
+        if not nt:
+            continue
+
+        regions = (("5_prime", nt[:start]), ("3_prime", nt[start + cds_len:]))
+        for which, sub in regions:
+            if len(sub) < min_aa * 3:
+                continue
+            for orf in find_orfs(sub, min_aa=min_aa,
+                                 require_atg=require_atg)[:max_per_transcript]:
+                serial += 1
+                gene = (getattr(tx, "gene_name", "")
+                        or getattr(tx, "gene_id", ""))
+                notes = [f"frame{orf.frame}", f"{which}_utr_orf",
+                         "three_frame_translation"]
+                if not orf.stop_found:
+                    notes.append("orf_runs_to_region_end")
+                records.append(ProteinRecord(
+                    seq_id=f"{id_prefix}_{NC_UTR}_{serial:06d}",
+                    sequence=orf.protein,
+                    variant_class=NC_UTR,
+                    consequence="noncanonical_orf",
+                    gene=gene,
+                    transcript=tx.tx_id,
+                    locus=f"{tx.chrom}:{min(s for s, _ in tx.exons)}"
+                          f"-{max(e for _, e in tx.exons)}",
+                    source="reference_annotation",
+                    novel_span=(1, orf.length),
+                    notes=notes,
+                    extra={"frame": orf.frame, "utr": which,
+                           "biotype": getattr(tx, "tx_biotype", ""),
+                           "description": f"{gene or tx.tx_id} {which} UTR "
+                                          f"ORF (frame {orf.frame})"},
+                ))
+    return records
 
 
 def build_noncanonical_proteins(
