@@ -56,6 +56,7 @@ Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
 | check | result |
 |---|---|
 | ClinVar benchmark, 263 asserted rows | **99.2% recall, 99.2% precision** |
+| same, all 336 rows including unasserted | 99.4% recall, 99.4% precision |
 | Ensembl VEP consequence agreement | **334/334 (100%)** on shared transcripts |
 | A-to-I editing positive controls | **5/5** |
 | GENCODE translation agreement | **100%** (single-transcript build) |
@@ -93,9 +94,11 @@ longest CDS → longest transcript → id.
 - **2 benchmark disagreements remain**, both the same FGFR3 variant
   (duplicated in the truth set) where the isoform numbering differs.
   Listed in `benchmarks/results/benchmark.md`.
-- **73 of 336 ClinVar truth rows carry no assertion criteria** and are
-  excluded from the headline figure. `--min-review-status any` includes
-  them.
+- **73 of 336 ClinVar truth rows carry no assertion criteria.** They are
+  excluded from the headline figure as conservatism about the truth data,
+  not to flatter the result: scoring all 336 gives 99.4%/99.4%, slightly
+  *higher* than the 263-row figure, with the same two disagreements.
+  `--min-review-status any` reproduces it.
 - **Non-canonical ORFs are off by default.** Enabling them takes the
   example database from 20,531 to 123,404 sequences; an inflated search
   space costs sensitivity at fixed FDR.

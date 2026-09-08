@@ -7,8 +7,10 @@ python3 scripts/09_benchmark.py --ref ref/                          # 263 rows
 python3 scripts/09_benchmark.py --ref ref/ --min-review-status any  # all 336
 ```
 
-Latest result: **97.3% recall, 98.1% precision** on the 263 small-variant
-rows with stated assertion criteria; 97.9% and 98.5% across all 336.
+Latest result: **99.2% recall, 99.2% precision** on the 263 small-variant
+rows with stated assertion criteria; 99.4% and 99.4% across all 336 -
+slightly higher, so excluding the unasserted rows is not flattering the
+figure.
 A-to-I editing 5 of 5. Full report, including every disagreement, in
 `results/benchmark.md`.
 
