@@ -108,10 +108,16 @@ from the annotation rather than quoted (see Validation).
   python3 scripts/09_benchmark.py --ref ref/ --min-review-status any  # all 336
   ```
 
+- **Consequence cross-check against Ensembl VEP: 332 of 334 loci agree,
+  99.4%.** An independent second opinion, not ground truth — VEP and v2p
+  read the same annotation but resolve transcripts separately. Both
+  disagreements are listed in `benchmarks/results/benchmark.md`. Produced
+  by `scripts/10_vep_annotate.py` (VEP REST, no 25 GB cache needed) then
+  `09_benchmark.py --vep-consequences`.
 - **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
   editing table, so this category has no comparator.
-- **262 tests**, all offline, no reference download, seconds to run:
-  94 pipeline, 80 release-invariant, 27 config, 27 species, 34
+- **269 tests**, all offline, no reference download, seconds to run:
+  94 pipeline, 80 release-invariant, 30 config, 27 species, 38
   non-canonical ORF.
 - **Nine release invariants** run before `v2p run` reports success, and
   any error-severity violation exits non-zero. On the HCC1395 dataset the

@@ -134,6 +134,8 @@ def main() -> int:
         keep_unchanged=False, decoys="shuffle", split_by_type=False,
         append_reference=False, logdir="lg", min_agreement=0.8,
         skip_invariant=["I5"], force=True, genetic_code="auto",
+        species="mouse", include_noncanonical=True, nc_min_aa=45,
+        nc_any_start=True,
         small_variants=None, rna_editing=None, fusion_calls=None,
         splicing=None, genome=None, annotation=None, proteome=None,
         translations=None)
@@ -150,6 +152,19 @@ def main() -> int:
     check("a list key survives the round trip",
           b.get("validate", "skip_invariant") == ["I5"],
           repr(b.get("validate", "skip_invariant")))
+    check("the species round-trips",
+          b.get("translate", "species") == "mouse",
+          str(b.get("translate", "species")))
+    check("the non-canonical flags round-trip, including the int",
+          b.get("translate", "include_noncanonical") is True
+          and b.get("translate", "noncanonical_min_aa") == 45
+          and b.get("translate", "noncanonical_any_start") is True,
+          str(b.to_dict()["translate"]))
+    ok, msg = raises(
+        lambda: loads_config(
+            "translate:\n  noncanonical_min_aa: thirty\n"),
+        "whole number")
+    check("a non-integer ORF length is refused", ok, msg[:70])
     check("a false bool survives the round trip and is not read as absent",
           b.get("translate", "keep_unchanged") is False
           and b.get("output", "split_by_type") is False)

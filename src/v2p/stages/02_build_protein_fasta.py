@@ -30,7 +30,7 @@ from v2p.build.smallvar import (                         # noqa: E402
 )
 from v2p.build.splicing import build_splicing_proteins   # noqa: E402
 from v2p.build.noncanonical import (
-    build_noncanonical_proteins, build_utr_orfs,
+    build_noncanonical_proteins, build_utr_orfs, drop_known_proteins,
 )
 from v2p.species import load_species
 from v2p.fasta import (                                  # noqa: E402
@@ -344,13 +344,22 @@ def main() -> int:
         rl.count('noncanonical.orfs', len(nc))
         for r in nc:
             rl.count(f'noncanonical.{r.variant_class}')
-        records.extend(nc)
         utr = build_utr_orfs(ann.tx.values(), genome,
                              min_aa=args.nc_min_aa,
                              require_atg=not args.nc_any_start)
         rl.log.info('UTR ORFs: %d', len(utr))
         rl.count('noncanonical.NC_UTR', len(utr))
-        records.extend(utr)
+        nc_all = nc + utr
+        if updb is not None:
+            # A pseudogene ORF often reproduces its parent gene's protein
+            # exactly. Those entries cannot yield a peptide the reference
+            # does not already explain, so they inflate the search space
+            # for nothing.
+            nc_all, n_dup = drop_known_proteins(
+                nc_all, (e.sequence for e in updb.entries.values()),
+                logger=rl.log)
+            rl.count("noncanonical.dropped_identical_to_reference", n_dup)
+        records.extend(nc_all)
 
     counts = write_fasta(records, fasta_path, style=args.header_style,
                          logger=rl.log, species=species)

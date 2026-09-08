@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from v2p.build.noncanonical import (                        # noqa: E402
     DEFAULT_MIN_AA, NC_CLASSES, build_noncanonical_proteins, build_utr_orfs,
-    classify_biotype, find_orfs,
+    classify_biotype, drop_known_proteins, find_orfs,
 )
 from v2p.seqops import CODON_TABLE, revcomp                  # noqa: E402
 
@@ -201,6 +201,22 @@ def main() -> int:
           all("ACDEFGHIKACDEFGHIK" not in r.sequence for r in urecs))
     check("a non-coding transcript yields no UTR ORFs",
           build_utr_orfs([tx], gen) == [])
+
+    # -------------------------------------- dedup against the reference
+    # A pseudogene ORF routinely reproduces its parent gene's protein. An
+    # entry duplicating a sequence already in the database is pure search
+    # space: it cannot explain a peptide the reference does not.
+    kept, n = drop_known_proteins(recs, [p40])
+    check("an ORF identical to a reference protein is dropped",
+          kept == [] and n == 1, f"{len(kept)} kept, {n} dropped")
+    kept2, n2 = drop_known_proteins(recs, ["MDIFFERENT" + "A" * 30])
+    check("an ORF absent from the reference is kept",
+          len(kept2) == 1 and n2 == 0, f"{len(kept2)} kept, {n2} dropped")
+    kept3, n3 = drop_known_proteins(recs, [p40[:-1]])
+    check("a one-residue difference is a real proteoform and is kept",
+          len(kept3) == 1 and n3 == 0)
+    check("an empty reference drops nothing",
+          drop_known_proteins(recs, []) == (recs, 0))
 
     # ------------------------------------------------------ off by default
     from v2p.fasta import VARIANT_TYPE_VOCAB                 # noqa: E402

@@ -206,6 +206,60 @@ def table(per) -> list[str]:
     return out
 
 
+# v2p consequence -> the VEP term meaning the same thing. Milestone 7d:
+# a second opinion, not a verdict. VEP and v2p read the same annotation
+# but resolve transcripts independently, so a disagreement is a thing to
+# look at rather than automatically a v2p bug.
+VEP_EQUIV = {
+    "missense": "missense_variant",
+    "stop_gained": "stop_gained",
+    "stop_lost": "stop_lost",
+    "start_lost": "start_lost",
+    "inframe_insertion": "inframe_insertion",
+    "inframe_deletion": "inframe_deletion",
+    "frameshift": "frameshift_variant",
+    "synonymous": "synonymous_variant",
+    "5_prime_UTR": "5_prime_UTR_variant",
+    "3_prime_UTR": "3_prime_UTR_variant",
+}
+
+
+def vep_crosscheck(path: Path, fasta: Path):
+    """Compare our consequence calls with VEP's, per locus.
+
+    Returns (agree, disagree_rows, unmatched). A locus counts as agreeing
+    when any v2p consequence at it maps to VEP's most severe term there.
+    """
+    ours: dict[str, set] = defaultdict(set)
+    with open(fasta, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith(">"):
+                continue
+            f = kv(line)
+            loc, csq = f.get("LOC"), f.get("CSQ")
+            if not loc or not csq:
+                continue
+            m = re.match(r"^(chr[^:]+):(\d+)", loc)
+            if m:
+                ours[f"{m.group(1)}:{m.group(2)}"].add(csq)
+
+    agree, disagree, unmatched = 0, [], 0
+    with open(path, encoding="utf-8") as fh:
+        for row in csv.DictReader(fh, delimiter="	"):
+            key = f"{row['chrom']}:{row['pos']}"
+            theirs = (row.get("vep_consequence") or "").strip()
+            mine = ours.get(key)
+            if not mine or not theirs:
+                unmatched += 1
+                continue
+            if any(VEP_EQUIV.get(c) == theirs for c in mine):
+                agree += 1
+            else:
+                disagree.append((key, row.get("vep_gene", ""),
+                                 ",".join(sorted(mine)), theirs))
+    return agree, disagree, unmatched
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -215,6 +269,11 @@ def main() -> int:
     ap.add_argument("--outdir", default="benchmarks/results")
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--workdir", help="keep the intermediate run here")
+    ap.add_argument("--vep-consequences", default="",
+                    help="TSV from scripts/10_vep_annotate.py. Adds an "
+                         "independent consequence cross-check (BUILD_SPEC "
+                         "milestone 7d). VEP is a second opinion, not "
+                         "ground truth.")
     ap.add_argument("--min-review-status", default="asserted",
                     choices=sorted(LEVELS),
                     help="minimum ClinVar review status to score. Default "
@@ -287,6 +346,27 @@ def main() -> int:
               "No competing tool accepts an editing table, so this category "
               "has no comparator.", ""]
         L += table(per_e)
+
+    if a.vep_consequences and Path(a.vep_consequences).is_file():
+        ag, dis, un = vep_crosscheck(Path(a.vep_consequences), fastas[0])
+        tot = ag + len(dis)
+        rl.count("vep.agree", ag)
+        rl.count("vep.disagree", len(dis))
+        L += ["", "## Consequence cross-check against Ensembl VEP", "",
+              f"{ag} of {tot} loci agree "
+              f"({ag / tot if tot else 0:.1%}); {un} could not be compared "
+              f"(no protein produced, or VEP returned no coding "
+              f"consequence).", "",
+              "VEP is an independent second opinion, not ground truth. Both "
+              "read the same annotation but resolve transcripts "
+              "independently, so a disagreement is a thing to look at.", ""]
+        if dis:
+            L += ["| locus | gene | v2p | VEP |", "|---|---|---|---|"]
+            L += [f"| {k} | {g} | {m} | {t} |" for k, g, m, t in dis[:40]]
+            if len(dis) > 40:
+                L.append(f"| ... | | {len(dis) - 40} more | |")
+        print(f"VEP cross-check: {ag}/{tot} agree "
+              f"({ag / tot if tot else 0:.1%}), {len(dis)} disagree")
 
     L += ["", "## Disagreements", ""]
     if not (bad_s + bad_e):

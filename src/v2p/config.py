@@ -58,7 +58,7 @@ class Key:
 
     name: str
     dest: str
-    type: str                       # str | path | bool | float | list
+    type: str                 # str | path | bool | int | float | list
     default: Any = None
     choices: tuple[str, ...] | None = None
     comment: str = ""
@@ -98,6 +98,17 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
         # it.
         Key("genetic_code", "genetic_code", "str", "auto", ("auto",),
             comment="auto = table 2 on the mitochondrial contig, 1 elsewhere"),
+        Key("species", "species", "str", "human",
+            comment="species name, or a path to a config/species/*.yaml"),
+        # Off by default and recorded either way. A run that turned
+        # three-frame translation on must say so in its own provenance,
+        # or the database size cannot be explained later.
+        Key("include_noncanonical", "include_noncanonical", "bool", False,
+            comment="three-frame translate non-coding transcripts"),
+        Key("noncanonical_min_aa", "nc_min_aa", "int", 30,
+            comment="minimum non-canonical ORF length in residues"),
+        Key("noncanonical_any_start", "nc_any_start", "bool", False,
+            comment="keep ORFs that do not begin at ATG"),
     ),
     "output": (
         Key("dir", "outdir", "path", "v2p_output"),
@@ -157,6 +168,15 @@ def _coerce(key: Key, raw: Any, where: str) -> Any:
             return raw.strip().lower() in ("true", "yes", "on")
         raise ConfigError(
             f"{where}: expected true or false, got {raw!r}")
+
+    if key.type == "int":
+        if isinstance(raw, bool) or isinstance(raw, (list, dict)):
+            raise ConfigError(f"{where}: expected a whole number, got {raw!r}")
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"{where}: expected a whole number, got {raw!r}") from None
 
     if key.type == "float":
         if isinstance(raw, bool) or isinstance(raw, (list, dict)):

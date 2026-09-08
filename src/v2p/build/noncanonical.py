@@ -27,6 +27,7 @@ from .smallvar import ProteinRecord
 __all__ = [
     "NC_CLASSES", "NoncanonicalORF", "classify_biotype",
     "find_orfs", "build_noncanonical_proteins", "build_utr_orfs",
+    "drop_known_proteins",
     "DEFAULT_MIN_AA",
 ]
 
@@ -146,6 +147,31 @@ def find_orfs(nt: str, min_aa: int = DEFAULT_MIN_AA,
     # runs - the reproducibility test depends on it.
     out.sort(key=lambda o: (-o.length, o.frame, o.nt_start))
     return out
+
+
+def drop_known_proteins(records, reference_sequences, logger=None):
+    """Remove ORFs whose protein is already in the reference proteome.
+
+    A three-frame translation of a pseudogene routinely reproduces the
+    protein of the parent gene, and an ORF that duplicates a sequence the
+    database already contains is pure search-space inflation: it cannot
+    yield a peptide the reference does not already explain, but it does
+    raise the score threshold at a fixed FDR for everything else.
+
+    Matching is on the exact sequence. A one-residue difference is a real
+    proteoform and is kept.
+    """
+    known = {s for s in reference_sequences if s}
+    kept, dropped = [], 0
+    for r in records:
+        if r.sequence in known:
+            dropped += 1
+            continue
+        kept.append(r)
+    if logger and dropped:
+        logger.info("dropped %d non-canonical ORF(s) identical to a "
+                    "reference protein", dropped)
+    return kept, dropped
 
 
 def build_utr_orfs(
