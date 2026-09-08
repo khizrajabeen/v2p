@@ -444,12 +444,14 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
     A("--combine-variants", action="store_true",
-      help="also emit one protein per transcript carrying two or more "
+      help="also emit one protein per haplotype carrying two or more "
            "co-occurring variants. A tryptic peptide spanning two variants "
            "exists only in the combined form, so a single-variant database "
-           "cannot identify it at any FDR. OFF by default: co-occurrence in "
-           "a call set is not phase, so each entry is a hypothesis and is "
-           "marked unphased.")
+           "cannot identify it at any FDR; combinations yielding no such "
+           "peptide are dropped rather than inflating the database. Phase "
+           "is honoured where the caller reports GT/PS, and variants on "
+           "opposite haplotypes are never combined; without phase the entry "
+           "is a hypothesis, marked unphased. OFF by default.")
     A("--include-noncanonical", action="store_true",
       help="also three-frame translate non-coding transcripts (lncRNA, "
            "pseudogene) into NC_* entries. OFF by default: it multiplies "

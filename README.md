@@ -35,12 +35,18 @@ alternative splicing into one FASTA with a shared header vocabulary.
   transcript, emit the protein carrying *all* of them. Every other tool
   translates one variant at a time, so a tryptic peptide spanning two
   variants exists in no entry of the database and cannot be identified at
-  any FDR. Because v2p is the only tool reading DNA variants, RNA editing,
-  fusions and splicing into one coordinate space, it is the only one that
-  can combine *across* evidence types — a somatic SNV plus an ADAR edit is
-  a proteoform with neither a purely genomic nor a purely transcriptomic
-  basis. Opt-in with `--combine-variants`; co-occurrence in a call set is
-  not phase, so every combined entry is marked `unphased`.
+  any FDR — [ProHap](https://doi.org/10.1038/s41592-024-02506-0) measured
+  this at 12.4% of substitutions for common haplotypes alone. Two variants
+  can even share a codon: in HCC1395, FKTN carries `p.[D225K]`, a lysine
+  no single-variant entry produces, which also creates a tryptic cleavage
+  site. Each entry must contribute a peptide that no single-variant entry
+  has, or it is dropped rather than inflating the database. Phase is
+  honoured where the caller reports `GT`/`PS` — variants on opposite
+  haplotypes are never combined — and entries are marked `unphased` where
+  it is absent. Because v2p is the only tool reading DNA variants, RNA
+  editing, fusions and splicing into one coordinate space, it is also the
+  only one that can combine *across* evidence types. Opt-in with
+  `--combine-variants`.
 - **Non-canonical ORFs** — three-frame translation of lncRNAs,
   pseudogenes, and 5′/3′ UTRs of coding transcripts (uORFs and dORFs),
   with the reading frame recorded per entry and a configurable length
@@ -152,7 +158,7 @@ Detection can be bypassed per evidence type:
 | `--decoys none\|reverse\|pseudo_reverse\|shuffle` | target-decoy strategy |
 | `--transcript-mode all\|representative` | every transcript, or one per gene |
 | `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |
-| `--combine-variants` | emit proteins carrying all co-occurring variants on a transcript |
+| `--combine-variants` | emit proteins carrying all co-occurring variants on a haplotype |
 | `--include-noncanonical` | three-frame translate non-coding transcripts |
 | `--split-by-type` / `--no-split` | per-variant-type FASTA files |
 
@@ -213,10 +219,11 @@ to state a recovery rate honestly.
 | A-to-I editing positive controls | **5/5** |
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **260/260** against 259/260 |
-| tests | **303**, offline, seconds |
+| combinatorial entries on HCC1395 | **9 kept**, 40 dropped as adding no peptide |
+| tests | **330**, offline, seconds |
 
 ```bash
-make test                                   # 303 assertions, no reference needed
+make test                                   # 330 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 ```
@@ -238,20 +245,10 @@ a library update cannot change a translation silently. Transcript ties
 break deterministically: MANE_Select → Ensembl_canonical → basic →
 longest CDS → longest transcript → id.
 
-## Limitations
-
-- **2 benchmark disagreements remain**, both the same FGFR3 variant
-  (duplicated in the truth set) where isoform numbering differs.
-- **Only genetic-code tables 1 and 2 are implemented.** A species needing
-  the invertebrate (5) or yeast (3) mitochondrial table is **refused**
-  rather than silently translated with the wrong one.
-
 ## Documentation
 
 - [docs/USAGE.md](docs/USAGE.md) — running your own data
 - [docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md) — header grammar, all four styles
-- [docs/TOOL_DESIGN.md](docs/TOOL_DESIGN.md) — input/output contract
-- [benchmarks/](benchmarks/) — truth sets, results, tool comparison
 
 ## Licence
 

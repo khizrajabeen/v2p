@@ -39,6 +39,30 @@ def classify_small_variant(ref: str, alt: str) -> str:
     return "INDEL"
 
 
+def _phase(fields: list[str], alt_index: int) -> tuple[str, frozenset]:
+    """(phase set, haplotypes carrying this ALT) from the first sample.
+
+    Only a pipe-separated GT is phase. `0/1` is a genotype: it says the
+    sample is heterozygous, not which allele the variant sits on, so it
+    yields nothing here. `PS` names the phase block, and two variants
+    share a haplotype only if they share the block; a phased GT with no
+    PS is treated as a single block, which is what chromosome-level
+    phasing means. Multi-sample VCFs use the first sample column, the
+    convention for a single-sample call set.
+    """
+    if len(fields) < 10 or not fields[8]:
+        return "", frozenset()
+    spec = dict(zip(fields[8].split(":"), fields[9].split(":")))
+    gt = spec.get("GT", "")
+    if "|" not in gt:
+        return "", frozenset()
+    haps = frozenset(i for i, a in enumerate(gt.split("|"))
+                     if a == str(alt_index))
+    if not haps:
+        return "", frozenset()
+    return spec.get("PS", "") or "*", haps
+
+
 def parse_vcf(path: str | Path,
               require_pass: bool = True,
               keep_filters: tuple[str, ...] = ("PASS", "HighConf"),
@@ -68,7 +92,7 @@ def parse_vcf(path: str | Path,
                 if not labels & set(keep_filters):
                     n_skip_filter += 1
                     continue
-            for alt in alts.split(","):
+            for alt_i, alt in enumerate(alts.split(","), start=1):
                 alt = alt.upper()
                 if alt in (".", "*") or alt.startswith("<") or "[" in alt or "]" in alt:
                     n_skip_symbolic += 1
@@ -77,6 +101,7 @@ def parse_vcf(path: str | Path,
                     n_skip_symbolic += 1
                     continue
                 vclass = classify_small_variant(ref, alt)
+                phase_set, haps = _phase(f, alt_i)
                 n_out += 1
                 yield {
                     "variant_id": f"{vclass}|{chrom}:{pos}{ref}>{alt}",
@@ -88,6 +113,7 @@ def parse_vcf(path: str | Path,
                     "payload": {
                         "chrom": chrom, "pos": pos, "ref": ref, "alt": alt,
                         "vcf_id": vid, "filter": flt, "info": info,
+                        "phase_set": phase_set, "haplotypes": sorted(haps),
                     },
                 }
     if logger:

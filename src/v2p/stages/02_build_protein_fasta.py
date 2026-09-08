@@ -75,15 +75,20 @@ def main() -> int:
                          "config/species/*.yaml. Sets the entry-name suffix "
                          "and the OS=/OX= fields in headers.")
     ap.add_argument("--combine-variants", action="store_true",
-                    help="also emit one protein per transcript carrying "
-                         "two or more co-occurring variants. A peptide "
-                         "spanning two variants exists only in the "
-                         "combined form. OFF by default: co-occurrence "
-                         "in a call set is not phase.")
+                    help="also emit one protein per haplotype carrying "
+                         "two or more co-occurring variants, where the "
+                         "combination yields a tryptic peptide no "
+                         "single-variant entry has. Phase is honoured "
+                         "where the caller reports it; without it the "
+                         "entry is marked unphased.")
     ap.add_argument("--combine-max", type=int, default=8,
                     help="most variants combined on one transcript "
                          "(default 8); above this is likely an "
                          "alignment artefact")
+    ap.add_argument("--combine-missed-cleavages", type=int, default=2,
+                    help="missed cleavages used to decide whether a "
+                         "combination yields a peptide that no "
+                         "single-variant entry has (default 2)")
     ap.add_argument("--include-noncanonical", action="store_true",
                     help="also three-frame translate non-coding "
                          "transcripts (lncRNA, pseudogene). OFF by "
@@ -178,7 +183,9 @@ def main() -> int:
             if vclass in SMALL_CLASSES:
                 combinable.append(CombinableVariant(
                     p["chrom"], p["pos"], p["ref"], p["alt"],
-                    vclass, row["source"], row.get("confidence", "")))
+                    vclass, row["source"], row.get("confidence", ""),
+                    p.get("phase_set", ""),
+                    frozenset(p.get("haplotypes") or ())))
                 genes = p.get("gene_refgene") or row["genes"]
                 recs = build_small_variant_proteins(
                     p["chrom"], p["pos"], p["ref"], p["alt"], ann, genome,
@@ -357,13 +364,16 @@ def main() -> int:
         combos = build_combinatorial_proteins(
             combinable, ann, genome,
             transcript_mode=args.transcript_mode,
-            max_variants=args.combine_max, logger=rl.log)
-        n_cross = sum(1 for r in combos
-                      if r.extra.get('cross_evidence'))
-        rl.log.info('combinatorial proteoforms: %d '
-                    '(%d combining more than one evidence type)',
-                    len(combos), n_cross)
+            max_variants=args.combine_max,
+            missed_cleavages=args.combine_missed_cleavages,
+            logger=rl.log)
+        n_cross = sum(1 for r in combos if r.extra.get('cross_evidence'))
+        n_phased = sum(1 for r in combos if r.extra.get('phased'))
+        rl.log.info('combinatorial proteoforms: %d (%d phased, %d combining '
+                    'more than one evidence type)',
+                    len(combos), n_phased, n_cross)
         rl.count('combinatorial.total', len(combos))
+        rl.count('combinatorial.phased', n_phased)
         rl.count('combinatorial.cross_evidence', n_cross)
         records.extend(combos)
 
