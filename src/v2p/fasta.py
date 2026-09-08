@@ -12,6 +12,7 @@ for; they differ only in how it is encoded.
 
 from __future__ import annotations
 
+import csv
 import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
@@ -263,8 +264,9 @@ def write_fasta(records: Sequence[ProteinRecord], path: str | Path,
 
     kept: list[ProteinRecord] = []
     seen_ids: set[str] = set()
-    seen_seq: dict[str, str] = {}
+    seen_seq: dict[str, ProteinRecord] = {}
     counts: dict[str, int] = {}
+    merges: list[dict[str, str]] = []
     n_dup_seq = 0
     for r in records:
         if not r.sequence:
@@ -283,8 +285,28 @@ def write_fasta(records: Sequence[ProteinRecord], path: str | Path,
             key = f"{r.variant_class}\t{r.sequence}"
             if key in seen_seq:
                 n_dup_seq += 1
+                # Dropping the record silently loses which variant it came
+                # from. Two different DNA changes encoding the same residue
+                # collapse here, and only the first one's locus survives
+                # into the header - which made a benchmark score the second
+                # as a miss when its protein had in fact been built.
+                # Record the merge instead of discarding it.
+                _k = seen_seq[key]
+                merges.append({
+                    "kept_seq_id": _k.seq_id,
+                    # The join key stage 6 can actually use: the header
+                    # carries a generated serial, not this seq_id, so
+                    # locus+transcript is what the two sides share.
+                    "kept_locus": _k.locus or "",
+                    "kept_transcript": _k.transcript or "",
+                    "merged_seq_id": uid,
+                    "merged_locus": r.locus or "",
+                    "merged_variant_class": r.variant_class,
+                    "merged_protein_change": r.protein_change or "",
+                    "merged_transcript": r.transcript or "",
+                })
                 continue
-            seen_seq[key] = uid
+            seen_seq[key] = r
         kept.append(r)
         counts[r.variant_class] = counts.get(r.variant_class, 0) + 1
 
@@ -294,6 +316,16 @@ def write_fasta(records: Sequence[ProteinRecord], path: str | Path,
         for r in kept:
             fh.write(fmt(r, prefix, species) + "\n")
             fh.write(wrap(r.sequence, width) + "\n")
+
+    # Sidecar, not header bytes: the merge record must not change the
+    # FASTA, which is compared byte-for-byte across releases.
+    if merges:
+        mpath = Path(str(path) + ".merged_loci.tsv")
+        with open(mpath, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(merges[0]),
+                               delimiter="\t", lineterminator="\n")
+            w.writeheader()
+            w.writerows(merges)
 
     if logger:
         logger.info("wrote %d sequences to %s (style=%s, %d identical "

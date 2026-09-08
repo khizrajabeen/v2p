@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import json
 import re
 import shutil
 import sys
@@ -170,6 +172,18 @@ def main() -> int:
     rl.add_input("uniprot", args.uniprot)
 
     # ---- 1. load + cross-class dedup ----------------------------------
+    # Stage 2 deduplicates identical sequences within a class before this
+    # stage ever sees them, dropping the locus of every merged record. The
+    # sidecar it writes is the only way to recover them, and without it the
+    # provenance graph is missing exactly the entries that most need it.
+    stage2_merges = {}
+    _side = Path(str(args.fasta) + ".merged_loci.tsv")
+    if _side.is_file():
+        with open(_side, encoding="utf-8") as fh:
+            for m in csv.DictReader(fh, delimiter="	"):
+                k = (m.get("kept_locus", ""), m.get("kept_transcript", ""))
+                stage2_merges.setdefault(k, []).append(m)
+
     entries = list(read_fasta(Path(args.fasta)))
     rl.log.info("read %d entries", len(entries))
     by_seq: dict[str, list[tuple[str, dict]]] = defaultdict(list)
@@ -194,6 +208,8 @@ def main() -> int:
 
     # ---- 3. build the release records ---------------------------------
     rows = []
+    provenance = []
+    peptide_rows = []
     kept: list[tuple[str, str]] = []
     stats = Counter()
     for seq, hits in by_seq.items():
@@ -255,6 +271,61 @@ def main() -> int:
         }
         if not args.no_sequence_column:
             row["sequence"] = seq
+        # -- M7a: the provenance graph ------------------------------
+        # `hits` holds every stage-2 record that produced this exact
+        # sequence. Cross-class dedup keeps one header and discards the
+        # rest, which loses the locus of every merged variant - two
+        # different DNA changes encoding the same residue collapse to one
+        # entry and one LOC. Recording them here is the only way to ask
+        # "which calls produced this sequence" without re-running.
+        # -- M7b: peptide-level provenance ---------------------------
+        # After a search returns a hit, the question is "which variant
+        # explains this peptide", and answering it from the FASTA alone
+        # means re-deriving the digest by hand. `span` is already the set
+        # of novel peptides covering the variant residue.
+        for pep in sorted(nov):
+            peptide_rows.append({
+                "peptide": pep,
+                "seq_id": new_hdr.split()[0].lstrip(">"),
+                "gene": meta.get("GN", ""),
+                "transcript": meta.get("TX", ""),
+                "variant_class": primary,
+                "consequence": meta.get("CSQ", ""),
+                "spans_variant": "yes" if pep in span else "no",
+                "protein_change": meta.get("PC", ""),
+                "loci": ";".join(
+                    sorted({h[1].get("LOC", "") for h in hits
+                            if h[1].get("LOC")})),
+            })
+
+        provenance.append({
+            "seq_id": row["seq_id"],
+            "sha256": hashlib.sha256(seq.encode()).hexdigest(),
+            "length": len(seq),
+            "variant_class": primary,
+            "also_classes": also,
+            "gene": meta.get("GN", ""),
+            "transcript": meta.get("TX", ""),
+            "n_variants": len(hits),
+            "variants": ([
+                {"seq_id": m["merged_seq_id"],
+                 "variant_class": m["merged_variant_class"],
+                 "consequence": "",
+                 "locus": m["merged_locus"],
+                 "transcript": m.get("merged_transcript", ""),
+                 "protein_change": m["merged_protein_change"]}
+                for h in hits
+                for m in stage2_merges.get(
+                    (h[1].get("LOC", ""), h[1].get("TX", "")), [])
+            ]) + [
+                {"seq_id": h[0].split()[0].lstrip(">"),
+                 "variant_class": h[1].get("VT", ""),
+                 "consequence": h[1].get("CSQ", ""),
+                 "locus": h[1].get("LOC", ""),
+                 "transcript": h[1].get("TX", ""),
+                 "protein_change": h[1].get("PC", "")}
+                for h in hits],
+        })
         rows.append(row)
 
     # ---- 4. reference + decoys ----------------------------------------
@@ -333,6 +404,36 @@ def main() -> int:
             idx.append("")
         (bc / "INDEX.md").write_text("\n".join(idx), encoding="utf-8")
         rl.log.info("wrote by_class/INDEX.md")
+
+    # M7b: one row per novel peptide, naming the variants that explain it.
+    # This is what a proteomics group needs once a search returns a hit.
+    pep_path = out / "tables" / "peptide_provenance.tsv"
+    pep_path.parent.mkdir(parents=True, exist_ok=True)
+    if peptide_rows:
+        with open(pep_path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(peptide_rows[0]),
+                               delimiter="\t", lineterminator="\n")
+            w.writeheader()
+            w.writerows(peptide_rows)
+        rl.add_output("peptide_provenance", pep_path)
+        rl.count("peptide_provenance_rows", len(peptide_rows))
+        n_span = sum(1 for r in peptide_rows if r["spans_variant"] == "yes")
+        rl.log.info("peptide provenance: %d novel peptides, %d spanning a "
+                    "variant residue", len(peptide_rows), n_span)
+
+    # M7a: one record per output sequence, listing every input record that
+    # produced it. JSON Lines so it streams and greps.
+    prov_path = out / "tables" / "provenance.jsonl"
+    prov_path.parent.mkdir(parents=True, exist_ok=True)
+    n_merged = sum(1 for p in provenance if p["n_variants"] > 1)
+    with open(prov_path, "w", newline="\n", encoding="utf-8") as fh:
+        for rec in provenance:
+            fh.write(json.dumps(rec, sort_keys=True) + "\n")
+    rl.add_output("provenance", prov_path)
+    rl.count("provenance_records", len(provenance))
+    rl.count("provenance_merged_sequences", n_merged)
+    rl.log.info("provenance: %d sequences, %d of them from more than one "
+                "input record", len(provenance), n_merged)
 
     table = out / f"{args.name}.entries.tsv"
     if rows:

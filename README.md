@@ -95,11 +95,11 @@ from the annotation rather than quoted (see Validation).
   in that codon reproduces the published substitution and the genome base
   matches the expected strand.
 - **Benchmark against ClinVar**, scored on the 263 rows that carry stated
-  assertion criteria: **97.3% recall, 98.1% precision**. Per category —
-  frameshift 98.8%, stop_gained 97.7%, missense 96.8%. Across all 336
+  assertion criteria: **97.7% recall, 98.1% precision**. Per category —
+  frameshift 98.8%, missense 97.9%, stop_gained 97.7%. Across all 336
   rows, including the 73 with no assertion criteria, 97.9% and 98.5%. The
   headline is the smaller, better-supported set; both are reported because
-  the difference is the first thing a reviewer will ask about. All seven
+  the difference is the first thing a reviewer will ask about. All six
   disagreements are listed individually in
   `benchmarks/results/benchmark.md` rather than summarised away.
 
@@ -114,15 +114,15 @@ from the annotation rather than quoted (see Validation).
   disagreements are listed in `benchmarks/results/benchmark.md`. Produced
   by `scripts/10_vep_annotate.py` (VEP REST, no 25 GB cache needed) then
   `09_benchmark.py --vep-consequences`.
-- **Against pypgatk 0.0.24, v2p loses on locus coverage**: 258/260
-  (99.2%) against pypgatk's 259/260 (99.6%) on the same truth loci.
-  pypgatk found one locus v2p did not; v2p found none pypgatk did not.
-  Two caveats a reader needs: the tools were not given the same input
-  (pypgatk cannot run on a sites-only VCF — it needs VEP annotation, which
-  is what told it the transcripts), and pypgatk emits no protein change,
-  so its output cannot be scored for correctness at all. Coverage and
-  correctness are different claims. Full detail, including how to
-  reproduce it, in `benchmarks/compare_tools.md`.
+- **Against pypgatk 0.0.24: a tie on locus coverage**, 259/260 (99.6%)
+  each, on the same truth loci. Neither found a five-base FBXW7 deletion.
+  An earlier version of this README reported v2p losing 99.2% to 99.6% —
+  that was a fault in the measurement, not the tool, and the correction is
+  written up in `benchmarks/compare_tools.md`. Two caveats a reader needs:
+  the tools were not given the same input (pypgatk cannot run on a
+  sites-only VCF — it needs VEP annotation, which is what told it the
+  transcripts), and pypgatk emits no protein change, so its output cannot
+  be scored for correctness at all.
 - **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
   editing table, so this category has no comparator.
 - **269 tests**, all offline, no reference download, seconds to run:

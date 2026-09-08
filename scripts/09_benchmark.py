@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import subprocess
 import sys
@@ -148,8 +149,34 @@ def write_inputs(folder: Path, small: list[dict], editing: list[dict]) -> None:
 
 
 def observed_changes(fasta: Path) -> dict[str, set[str]]:
-    """locus -> the set of protein changes the pipeline produced there."""
+    """locus -> the set of protein changes the pipeline produced there.
+
+    Reads `tables/provenance.jsonl` when present, falling back to FASTA
+    headers only when it is not. This is a correctness fix, not a
+    preference: cross-class deduplication merges identical sequences and
+    keeps a single header, so a locus whose protein duplicates another
+    variant's vanishes from the headers. Scoring off headers alone
+    under-counted recall - two HRAS variants both encoding p.F156L
+    collapsed into one entry, and the benchmark called the second a miss
+    when the protein had in fact been built.
+    """
+    prov = fasta.parent / "tables" / "provenance.jsonl"
     got: dict[str, set[str]] = defaultdict(set)
+    if prov.is_file():
+        with open(prov, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                for v in json.loads(line).get("variants", []):
+                    loc, pc = v.get("locus"), v.get("protein_change")
+                    if not loc or not pc:
+                        continue
+                    m = re.match(r"^(chr[^:]+):(\d+)", loc)
+                    if m:
+                        got[f"{m.group(1)}:{m.group(2)}"].add(norm_change(pc))
+        if got:
+            return got
+
     with open(fasta, encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith(">"):

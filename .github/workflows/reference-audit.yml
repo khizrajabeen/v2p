@@ -1,0 +1,112 @@
+# Milestone 7c - continuous reference auditing.
+#
+# The point is stated in docs/BUILD_SPEC.md: "When GENCODE releases a new
+# version, the audit tells you what changed about the *interface* - new
+# feature types, changed tag vocabulary, altered frame conventions -
+# before it silently changes your output."
+#
+# Four real bugs were found this way that output-agreement testing missed
+# entirely: the ignored GTF frame column, selenocysteine truncation, the
+# unapplied mitochondrial code, and ambiguous gene symbols. None raised an
+# error; all produced plausible-looking wrong protein.
+#
+# This is deliberately NOT part of tests.yml. That workflow is offline and
+# runs in seconds on every push. This one downloads a 48 MB annotation and
+# runs weekly, so a GENCODE change surfaces on its own schedule rather
+# than blocking a pull request.
+#
+# The genome is not downloaded. At 3.1 GB it is impractical here, and the
+# checks that matter for an annotation release - feature types, tag
+# vocabulary, frame conventions, biotype names - need only the GTF. The
+# audit then reports the assembly check as unasserted, which is honest.
+
+name: reference audit
+
+on:
+  schedule:
+    # Weekly, Monday 04:00 UTC. GENCODE releases a few times a year; this
+    # catches one within a week of it landing.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      gencode_release:
+        description: "GENCODE release to audit (default 44, the pinned one)"
+        required: false
+        default: "44"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: resolve release
+        id: rel
+        run: |
+          REL="${{ github.event.inputs.gencode_release }}"
+          echo "release=${REL:-44}" >> "$GITHUB_OUTPUT"
+
+      - name: cache the annotation
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ref
+          key: gencode-${{ steps.rel.outputs.release }}-gtf
+
+      - name: fetch the annotation only
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          REL="${{ steps.rel.outputs.release }}"
+          BASE="https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_${REL}"
+          mkdir -p ref
+          # The GTF and the annotation source's own translations. Not the
+          # genome: 3.1 GB is impractical here, and the interface checks
+          # that matter for a release do not need it.
+          curl -fL --retry 3 -o "ref/gencode.v${REL}.annotation.gtf.gz" \
+              "${BASE}/gencode.v${REL}.annotation.gtf.gz"
+          curl -fL --retry 3 -o "ref/gencode.v${REL}.pc_translations.fa.gz" \
+              "${BASE}/gencode.v${REL}.pc_translations.fa.gz"
+          ls -la ref/
+
+      - name: audit the reference interface
+        run: |
+          set -o pipefail
+          python scripts/v2p audit --ref ref 2>&1 | tee audit.txt
+
+      - name: fail on a reported interface bug
+        run: |
+          # The audit prints [BUG] for an assumption it can prove wrong. A
+          # warning is informational - a missing genome, for instance,
+          # which is expected here. A BUG is not.
+          if grep -q "\[BUG\]" audit.txt; then
+            echo "::error::the reference audit reported a BUG - an assumption"
+            echo "::error::this pipeline makes about the annotation no longer holds."
+            echo "::error::Read the audit artifact before trusting any output"
+            echo "::error::built against this release."
+            grep "\[BUG\]" audit.txt
+            exit 1
+          fi
+          echo "no interface bugs reported"
+
+      - name: keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-audit
+          path: audit.txt
+          retention-days: 90

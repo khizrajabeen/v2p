@@ -2,40 +2,43 @@
 
 **Status: pypgatk measured. ProteoDisco not attempted.**
 
-## Result: pypgatk edges v2p on locus coverage
+## Result: a tie on locus coverage
 
 | tool | version | loci with at least one variant entry | recall |
 |---|---|---:|---:|
-| v2p | 1.0.0 | 258 / 260 | 99.2% |
-| **pypgatk** | **0.0.24** | **259 / 260** | **99.6%** |
+| v2p | 1.0.0 | 259 / 260 | 99.6% |
+| pypgatk | 0.0.24 | 259 / 260 | 99.6% |
 
-pypgatk found one locus v2p did not. v2p found none pypgatk did not. One
-locus neither produced. **That is a loss, by one variant, and it belongs
-here rather than in a drawer.**
+Neither found `chr4:152332595`, a five-base FBXW7 deletion. Every other
+asserted locus was covered by both.
 
-Two things must be said alongside it, not to explain the result away but
-because a reader cannot interpret the number without them.
+### Correction
 
-**The two tools were not given the same input.** pypgatk cannot run on a
-sites-only VCF at all; it requires VEP annotation, and VEP is what told it
-which transcripts to use. v2p resolved transcripts itself from the
-unannotated VCF. So this compares v2p-doing-its-own-annotation against
-pypgatk-given-VEP's-annotation. That is the only comparison available,
-because the alternative is not running pypgatk at all, but it is not a
-like-for-like test of the same task.
+An earlier version of this file reported **99.2% for v2p against 99.6% for
+pypgatk**, a loss by one variant. That was wrong, and the fault was in the
+measurement, not the tool.
 
-**Only one of the two can be scored on protein-change correctness.**
-pypgatk's headers carry a locus and a transcript and no protein change,
-and its sequences contain internal stop codons - it emits translated
-transcript products rather than annotated proteoforms. So "did the right
-protein change come out" cannot be asked of it. v2p's 97.3% recall and
-98.1% precision on protein change have no pypgatk counterpart, and it
-would be dishonest to present the 99.2%/99.6% row as if it were the same
-measurement.
+The metric read the `LOC=` field from the shipped FASTA headers. Cross-
+class deduplication merges identical sequences and keeps one header, so a
+locus whose protein duplicates another variant's disappears from the
+headers entirely. Two HRAS variants, `chr11:532738 G>C` and
+`chr11:532740 A>G`, both encode `p.F156L` and both are in the truth set;
+v2p built the protein for both and the disposition table records
+`protein_built` for each, but only the first survives into a header. The
+benchmark scored the second as a miss.
 
-Coverage and correctness are different claims. On coverage of these 260
-loci, pypgatk is ahead by one. On protein-change correctness, there is no
-comparison to make.
+Two things came out of that. The scoring now reads
+`tables/provenance.jsonl`, which lists every contributing variant per
+sequence, and falls back to headers only when it is absent. And the
+underlying provenance loss is fixed at source: stage 2's deduplication
+writes a sidecar recording each merged record's locus, which the
+provenance graph folds in. Protein-change recall moved from 97.3% to
+**97.7%** as a result - not because the tool improved, but because the
+measurement stopped hiding work it had already done.
+
+The lesson is the one this project keeps relearning: the output looked
+fine, and only an independent check exposed the error. Here the
+independent check was a competitor scoring better than expected.
 
 ## Getting pypgatk to run at all
 
@@ -169,8 +172,8 @@ release each was given, because neither can be pointed at GENCODE v44.
 
 | tool | version | locus coverage | protein-change recall | precision |
 |---|---|---:|---:|---:|
-| v2p | 1.0.0 | 99.2% (258/260) | 97.3% | 98.1% |
-| pypgatk | 0.0.24 | **99.6% (259/260)** | not reportable | not reportable |
+| v2p | 1.0.0 | 99.6% (259/260) | 97.7% | 98.1% |
+| pypgatk | 0.0.24 | 99.6% (259/260) | not reportable | not reportable |
 | ProteoDisco | — | not attempted | not attempted | not attempted |
 
 pypgatk emits no protein change, so those two columns cannot be filled for
