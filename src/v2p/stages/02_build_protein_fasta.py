@@ -29,6 +29,9 @@ from v2p.build.smallvar import (                         # noqa: E402
     ProteinRecord, build_small_variant_proteins,
 )
 from v2p.build.splicing import build_splicing_proteins   # noqa: E402
+from v2p.build.combinatorial import (
+    CombinableVariant, build_combinatorial_proteins,
+)
 from v2p.build.noncanonical import (
     build_noncanonical_proteins, build_utr_orfs, drop_known_proteins,
 )
@@ -71,6 +74,16 @@ def main() -> int:
                     help="species name (human, mouse, ...) or a path to a "
                          "config/species/*.yaml. Sets the entry-name suffix "
                          "and the OS=/OX= fields in headers.")
+    ap.add_argument("--combine-variants", action="store_true",
+                    help="also emit one protein per transcript carrying "
+                         "two or more co-occurring variants. A peptide "
+                         "spanning two variants exists only in the "
+                         "combined form. OFF by default: co-occurrence "
+                         "in a call set is not phase.")
+    ap.add_argument("--combine-max", type=int, default=8,
+                    help="most variants combined on one transcript "
+                         "(default 8); above this is likely an "
+                         "alignment artefact")
     ap.add_argument("--include-noncanonical", action="store_true",
                     help="also three-frame translate non-coding "
                          "transcripts (lncRNA, pseudogene). OFF by "
@@ -147,6 +160,7 @@ def main() -> int:
 
     wanted = {c.strip() for c in args.classes.split(",") if c.strip()}
     records: list[ProteinRecord] = []
+    combinable: list = []
     disposition: list[dict] = []
     ref_emitted: set[str] = set()
     n_rows = 0
@@ -162,6 +176,9 @@ def main() -> int:
         rl.count(f"input.{vclass}")
         try:
             if vclass in SMALL_CLASSES:
+                combinable.append(CombinableVariant(
+                    p["chrom"], p["pos"], p["ref"], p["alt"],
+                    vclass, row["source"], row.get("confidence", "")))
                 genes = p.get("gene_refgene") or row["genes"]
                 recs = build_small_variant_proteins(
                     p["chrom"], p["pos"], p["ref"], p["alt"], ann, genome,
@@ -335,6 +352,21 @@ def main() -> int:
     tag = f"{args.header_style}.{args.transcript_mode}"
     fasta_path = outdir / "fasta" / f"HCC1395_variant_proteins.{tag}.fasta"
     table_path = outdir / "tables" / f"protein_records.{tag}.tsv"
+    if args.combine_variants:
+        rl.log.info('combining co-occurring variants ...')
+        combos = build_combinatorial_proteins(
+            combinable, ann, genome,
+            transcript_mode=args.transcript_mode,
+            max_variants=args.combine_max, logger=rl.log)
+        n_cross = sum(1 for r in combos
+                      if r.extra.get('cross_evidence'))
+        rl.log.info('combinatorial proteoforms: %d '
+                    '(%d combining more than one evidence type)',
+                    len(combos), n_cross)
+        rl.count('combinatorial.total', len(combos))
+        rl.count('combinatorial.cross_evidence', n_cross)
+        records.extend(combos)
+
     if args.include_noncanonical:
         rl.log.info('three-frame translating non-coding transcripts ...')
         nc = build_noncanonical_proteins(

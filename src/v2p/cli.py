@@ -284,6 +284,7 @@ def cmd_run(args: argparse.Namespace) -> int:
          "--species", args.species,
          *(["--include-noncanonical"] if args.include_noncanonical else []),
          "--nc-min-aa", str(args.nc_min_aa),
+         *(["--combine-variants"] if args.combine_variants else []),
          "--emit-disposition", str(work / "tables" / "disposition.tsv"),
          "--outdir", str(work)]
     if args.keep_unchanged:
@@ -442,6 +443,13 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--combine-variants", action="store_true",
+      help="also emit one protein per transcript carrying two or more "
+           "co-occurring variants. A tryptic peptide spanning two variants "
+           "exists only in the combined form, so a single-variant database "
+           "cannot identify it at any FDR. OFF by default: co-occurrence in "
+           "a call set is not phase, so each entry is a hypothesis and is "
+           "marked unphased.")
     A("--include-noncanonical", action="store_true",
       help="also three-frame translate non-coding transcripts (lncRNA, "
            "pseudogene) into NC_* entries. OFF by default: it multiplies "
