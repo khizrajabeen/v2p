@@ -49,7 +49,7 @@ Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
 | QUILTS | yes | yes | no | no | partial |
 | ProteoDisco | yes | yes | no | no | no |
 | pypgatk | yes | no | no | no | yes |
-| **v2p** | yes | yes | **yes** | **yes** | yes (opt-in) |
+| **v2p** | yes | yes | **yes** | **yes** | **yes** |
 
 ## Measured
 
@@ -61,10 +61,10 @@ Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
 | A-to-I editing positive controls | **5/5** |
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **260/260** vs 259/260 |
-| tests | **278**, offline, seconds |
+| tests | **287**, offline, seconds |
 
 ```bash
-make test                                   # 278 assertions, no reference needed
+make test                                   # 287 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 v2p audit --ref ref/                        # check the reference interface
@@ -88,20 +88,23 @@ longest CDS → longest transcript → id.
 
 ## Limitations
 
-- **Human and mouse only.** Other species need a `config/species/*.yaml`.
+- **Vertebrates only.** Human, mouse, rat and zebrafish ship; any other
+  vertebrate is one `config/species/*.yaml` with no code change. Only
+  genetic-code tables 1 and 2 are implemented, so a species needing the
+  invertebrate (5) or yeast (3) mitochondrial table is **refused** rather
+  than silently translated with the wrong one.
 - **No ProteoDisco comparison.** It needs R, Bioconductor, BSgenome and a
   TxDb; not run. `benchmarks/compare_tools.md` has the procedure.
 - **2 benchmark disagreements remain**, both the same FGFR3 variant
   (duplicated in the truth set) where the isoform numbering differs.
   Listed in `benchmarks/results/benchmark.md`.
-- **73 of 336 ClinVar truth rows carry no assertion criteria.** They are
-  excluded from the headline figure as conservatism about the truth data,
-  not to flatter the result: scoring all 336 gives 99.4%/99.4%, slightly
-  *higher* than the 263-row figure, with the same two disagreements.
-  `--min-review-status any` reproduces it.
-- **Non-canonical ORFs are off by default.** Enabling them takes the
-  example database from 20,531 to 123,404 sequences; an inflated search
-  space costs sensitivity at fixed FDR.
+
+- **Non-canonical ORFs are off by default**, and should stay that way
+  unless you are specifically hunting lncRNA or uORF peptides. Enabling
+  them takes the example database from 20,531 to 175,552 sequences —
+  8.5×, after entries identical to a reference protein are already
+  dropped. An inflated search space costs sensitivity at fixed FDR. This
+  is a documented tradeoff, not a defect.
 
 ## Licence
 

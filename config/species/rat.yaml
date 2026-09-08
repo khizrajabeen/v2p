@@ -1,0 +1,11 @@
+# Rat, mRatBN7.2. Vertebrate mitochondrial code (table 2), which seqops
+# implements. contig_lengths is left empty on purpose: without verified
+# values the audit reports the assembly as unasserted, which is honest.
+# Fill them in to enable that check.
+scientific_name: Rattus norvegicus
+common_name: rat
+taxon_id: 10116
+entry_suffix: RAT
+assembly: mRatBN7.2
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2

@@ -22,9 +22,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 __all__ = [
-    "Species", "HUMAN", "MOUSE", "BUILTIN",
+    "Species", "HUMAN", "MOUSE", "RAT", "ZEBRAFISH", "BUILTIN",
+    "SUPPORTED_MITO_CODES",
     "from_mapping", "load_species", "species_dir", "available",
 ]
+
+
+# The genetic codes seqops.py actually implements. Declaring any other in
+# a species file is refused rather than accepted and ignored: an
+# invertebrate (table 5) or yeast (table 3) mitochondrion would otherwise
+# be translated with the vertebrate table and produce plausible, wrong
+# protein - the exact failure mode this project keeps meeting.
+SUPPORTED_MITO_CODES = {
+    1: "standard",
+    2: "vertebrate mitochondrial",
+}
 
 
 @dataclass(frozen=True)
@@ -73,7 +85,18 @@ MOUSE = Species(
                     "chr11": 121973369},
 )
 
-BUILTIN = {"human": HUMAN, "mouse": MOUSE}
+RAT = Species(
+    scientific_name="Rattus norvegicus", taxon_id=10116, entry_suffix="RAT",
+    common_name="rat", assembly="mRatBN7.2",
+)
+
+ZEBRAFISH = Species(
+    scientific_name="Danio rerio", taxon_id=7955, entry_suffix="DANRE",
+    common_name="zebrafish", assembly="GRCz11",
+)
+
+BUILTIN = {"human": HUMAN, "mouse": MOUSE, "rat": RAT,
+           "zebrafish": ZEBRAFISH}
 
 
 def species_dir() -> Path:
@@ -123,6 +146,18 @@ def from_mapping(data: dict, where: str = "species") -> Species:
     if isinstance(mito, str):
         mito = [x.strip() for x in mito.split(",") if x.strip()]
 
+    code = _as_int(data.get("mito_code", Species.mito_code), "mito_code")
+    if code not in SUPPORTED_MITO_CODES:
+        # Accepting a code seqops cannot apply would put a setting in the
+        # provenance record that never happened - the same failure as a
+        # config file whose keys do nothing. Refuse instead, and name what
+        # is implemented so the message is actionable.
+        raise ValueError(
+            f"{where}: mito_code {code} is not implemented. "
+            f"seqops.py provides "
+            f"{', '.join(f'{k} ({v})' for k, v in SUPPORTED_MITO_CODES.items())}. "
+            f"Add the table to seqops.py before declaring it here.")
+
     return Species(
         scientific_name=str(data.get("scientific_name",
                                      Species.scientific_name)),
@@ -132,8 +167,7 @@ def from_mapping(data: dict, where: str = "species") -> Species:
         common_name=str(data.get("common_name", Species.common_name)),
         assembly=str(data.get("assembly", Species.assembly)),
         mito_contigs=tuple(str(x) for x in mito),
-        mito_code=_as_int(data.get("mito_code", Species.mito_code),
-                          "mito_code"),
+        mito_code=code,
         contig_lengths=lengths,
     )
 

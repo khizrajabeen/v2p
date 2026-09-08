@@ -22,7 +22,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from v2p.build.smallvar import ProteinRecord                # noqa: E402
 from v2p.fasta import HEADER_STYLES                         # noqa: E402
 from v2p.species import (                                   # noqa: E402
-    HUMAN, MOUSE, available, from_mapping, load_species,
+    HUMAN, MOUSE, RAT, SUPPORTED_MITO_CODES, ZEBRAFISH, available,
+    from_mapping, load_species,
 )
 
 PASS: list[str] = []
@@ -159,6 +160,33 @@ def main() -> int:
     check("mitochondrial contigs and code are per species",
           HUMAN.is_mito("chrM") and HUMAN.mito_code == 2
           and not HUMAN.is_mito("chr1"))
+
+    # ------------------------------------------- more shipped species
+    check("four species ship, not two",
+          {"human", "mouse", "rat", "zebrafish"} <= set(available()),
+          str(available()))
+    for _n, _w in (("rat", RAT), ("zebrafish", ZEBRAFISH)):
+        _f = ROOT / "config" / "species" / f"{_n}.yaml"
+        check(f"config/species/{_n}.yaml matches the built-in {_n}",
+              _f.is_file() and load_species(_f) == _w)
+    check("rat and zebrafish carry their own taxon and suffix",
+          RAT.taxon_id == 10116 and RAT.entry_suffix == "RAT"
+          and ZEBRAFISH.taxon_id == 7955
+          and ZEBRAFISH.entry_suffix == "DANRE")
+
+    # A genetic code the pipeline cannot apply must be refused, not
+    # stored. An invertebrate mitochondrion (table 5) translated with the
+    # vertebrate table yields plausible, wrong protein.
+    check("only implemented genetic codes are listed",
+          set(SUPPORTED_MITO_CODES) == {1, 2},
+          str(sorted(SUPPORTED_MITO_CODES)))
+    for _code in (3, 5, 11):
+        ok, msg = raises(lambda c=_code: from_mapping({"mito_code": c}),
+                         "not implemented")
+        check(f"mito_code {_code} is refused, not silently ignored", ok,
+              msg[:60])
+    check("mito_code 2 is still accepted",
+          from_mapping({"mito_code": 2}).mito_code == 2)
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     return 1 if FAIL else 0

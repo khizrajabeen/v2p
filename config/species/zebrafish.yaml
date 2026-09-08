@@ -1,0 +1,9 @@
+# Zebrafish, GRCz11. Vertebrate mitochondrial code (table 2). See the note
+# in rat.yaml about contig_lengths.
+scientific_name: Danio rerio
+common_name: zebrafish
+taxon_id: 7955
+entry_suffix: DANRE
+assembly: GRCz11
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2
