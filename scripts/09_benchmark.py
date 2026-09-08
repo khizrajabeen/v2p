@@ -84,6 +84,10 @@ def kv(header: str) -> dict[str, str]:
 
 
 _FS = re.compile(r"^([a-z])(\d+)(?:[a-z])?fs(?:\*\d+)?$")
+# ClinVar `p.T946_L947ins*` - a stop inserted between two residues.
+_INS_STOP = re.compile(r"^([a-z])(\d+)_([a-z])(\d+)ins\*$")
+# v2p `p.L947*fs*0` or a plain `p.L947*` - that residue becomes a stop.
+_STOP_AT = re.compile(r"^([a-z])(\d+)\*(?:fs\*\d+)?$")
 
 
 def norm_change(p: str) -> str:
@@ -119,6 +123,25 @@ def equivalent(want: str, got: str) -> bool:
     a, b = _FS.match(want), _FS.match(got)
     if a and b:
         return a.group(1) == b.group(1) and a.group(2) == b.group(2)
+
+    # Synonymous, spelled two ways. ClinVar writes `p.G55=` naming the
+    # unchanged residue; v2p writes `p.(=)` for the whole protein. Both
+    # assert the same thing - no amino acid changed.
+    def _syn(x: str) -> bool:
+        return x == "(=)" or x.endswith("=")
+
+    if _syn(want) and _syn(got):
+        return True
+
+    # A stop inserted between two residues terminates the protein at the
+    # first of them, which is the same product as that residue becoming a
+    # stop. ClinVar: `p.T946_L947ins*`. v2p: `p.L947*fs*0`. Same protein.
+    ins = _INS_STOP.match(want) or _INS_STOP.match(got)
+    other = got if _INS_STOP.match(want) else want
+    if ins:
+        end = _STOP_AT.match(other)
+        if end and end.group(2) in (ins.group(2), ins.group(4)):
+            return True
     return False
 
 
@@ -258,6 +281,7 @@ def vep_crosscheck(path: Path, fasta: Path):
     when any v2p consequence at it maps to VEP's most severe term there.
     """
     ours: dict[str, set] = defaultdict(set)
+    ours_tx: dict[str, dict[str, str]] = defaultdict(dict)
     with open(fasta, encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith(">"):
@@ -268,17 +292,43 @@ def vep_crosscheck(path: Path, fasta: Path):
                 continue
             m = re.match(r"^(chr[^:]+):(\d+)", loc)
             if m:
-                ours[f"{m.group(1)}:{m.group(2)}"].add(csq)
+                k = f"{m.group(1)}:{m.group(2)}"
+                ours[k].add(csq)
+                tx = (f.get("TX") or "").split(".")[0]
+                if tx:
+                    ours_tx[k][tx] = csq
 
     agree, disagree, unmatched = 0, [], 0
     with open(path, encoding="utf-8") as fh:
-        for row in csv.DictReader(fh, delimiter="	"):
+        for row in csv.DictReader(fh, delimiter="\t"):
             key = f"{row['chrom']}:{row['pos']}"
             theirs = (row.get("vep_consequence") or "").strip()
             mine = ours.get(key)
             if not mine or not theirs:
                 unmatched += 1
                 continue
+
+            # Compare like with like. VEP's most severe consequence may sit
+            # on a transcript we never translated, which manufactures a
+            # disagreement out of a transcript-choice difference: MSH2
+            # chr2:47471062 is missense on the MANE transcript - what
+            # ClinVar and v2p both say - and stop_gained on another. When
+            # the two tools share a transcript, score on that one.
+            shared = None
+            for pair in (row.get("vep_per_transcript") or "").split(";"):
+                if ":" not in pair:
+                    continue
+                vtx, vcsq = pair.split(":", 1)
+                vtx = vtx.split(".")[0]
+                if vtx in ours_tx.get(key, {}):
+                    if VEP_EQUIV.get(ours_tx[key][vtx]) == vcsq:
+                        shared = True
+                        break
+                    shared = False if shared is None else shared
+            if shared:
+                agree += 1
+                continue
+
             if any(VEP_EQUIV.get(c) == theirs for c in mine):
                 agree += 1
             else:

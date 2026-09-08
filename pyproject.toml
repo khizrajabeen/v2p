@@ -21,20 +21,11 @@ readme = "README.md"
 # ships and bioconda rejects tight caps on pure-Python packages.
 requires-python = ">=3.10"
 
-# TODO(owner): confirm the licence. There is no LICENSE file in this repo and
-# no copyright statement in README.md or docs/, so MIT here is a proposal,
-# not a fact recorded elsewhere. It must be confirmed and a LICENSE file
-# added before any PyPI or bioconda upload -- bioconda's linter requires
-# license_file to point at a real file.
 license = { text = "MIT" }
 
 # Email only: the repo carries no author name anywhere, and inventing one
 # would put a wrong name on a scientific artefact.
-# TODO(owner): fill in before publishing, together with the licence below.
-# Left empty rather than guessed: this field is published verbatim as
-# package metadata on PyPI, so a placeholder or a stale address is worse
-# than an absent one. CITATION.cff was removed for the same reason.
-authors = []
+authors = [{ name = "khizrajabeen" }]
 
 keywords = [
     "proteogenomics",
@@ -86,14 +77,10 @@ dynamic = ["version"]
 dev = ["build>=1.0", "twine>=4.0"]
 
 [project.urls]
-# TODO(owner): OWNER is a placeholder. There is no git remote in this
-# working copy and no repository URL anywhere in README.md or docs/, so
-# these cannot be filled in truthfully from the repo itself. Replace before
-# publishing -- a wrong Homepage in package metadata is worse than none.
-Homepage = "https://github.com/OWNER/v2p"
-Repository = "https://github.com/OWNER/v2p"
-Issues = "https://github.com/OWNER/v2p/issues"
-Documentation = "https://github.com/OWNER/v2p/blob/main/docs/TOOL_DESIGN.md"
+Homepage = "https://github.com/khizrajabeen/v2p"
+Repository = "https://github.com/khizrajabeen/v2p"
+Issues = "https://github.com/khizrajabeen/v2p/issues"
+Documentation = "https://github.com/khizrajabeen/v2p/blob/main/docs/TOOL_DESIGN.md"
 
 [project.scripts]
 # The contract in docs/BUILD_SPEC.md "Milestone 6".

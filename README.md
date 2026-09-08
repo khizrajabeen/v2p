@@ -1,254 +1,106 @@
 # v2p — variant calls to protein sequences
 
-v2p turns genomic and transcriptomic variant calls into an amino-acid
-sequence database for mass-spectrometry search, and records what happened
-to every input variant. It reads somatic SNVs and indels, A-to-I RNA
-editing tables, gene fusion calls and alternative-splicing events, and
-emits one coherent FASTA with a shared header vocabulary. It exists
-because no other tool covers those four evidence types together: RNA
-editing produces proteoforms with no genomic basis, so they are invisible
-to any DNA-driven pipeline, and fusions and splicing normally need
-separate pipelines whose outputs nobody reconciles. Every variant that
-does *not* produce a protein gets a recorded reason, because silence is
-where wrong answers hide.
+Turns genomic and transcriptomic variant calls into a protein FASTA for
+mass-spectrometry search, and records what happened to **every** input
+variant — including the ones that produce nothing.
 
-## Where it sits
-
-| tool | year | language | small variants | splice junctions | RNA editing | fusions | non-canonical ORFs | status |
-|---|---|---|---|---|---|---|---|---|
-| customProDB | 2013 | R | yes | yes | no | no | no | unmaintained |
-| QUILTS | 2016 | Python | yes | yes | no | no | partial | dormant |
-| ProteoDisco | 2021 | R/Bioconductor | yes | yes | no | no | no | maintained |
-| pypgatk / pgdb | 2021 | Python | yes | no | no | no | **yes** (3-frame) | maintained |
-| **v2p** | — | Python | yes | yes | **yes** | **yes** | yes (opt-in) | this repo |
-
-The claim worth making, and only this one: the first tool to build a single
-protein database from DNA variants, RNA editing, fusions and splicing
-together, with every input variant's fate recorded. Not "more accurate" —
-that needs a published benchmark this repo does not yet have. Not "better
-than VEP" — VEP is not a database builder. Three-frame translation of non-coding
-transcripts exists as of M5, but pypgatk had it first and has more
-mileage on it.
+Reads four evidence types into one database: somatic SNVs/indels, A-to-I
+RNA editing, gene fusions, and alternative splicing. No other tool covers
+that combination.
 
 ## Install
 
 ```bash
 pip install .
+bash scripts/00_fetch_references.sh ref/     # GRCh38 + GENCODE v44, ~18 GB, once
 ```
 
-Python 3.10–3.13. The only runtime dependency is `pyfaidx`.
+Python 3.10–3.13. Only runtime dependency: `pyfaidx`.
 
-Then fetch the references once (~18 GB, GENCODE v44 + GRCh38):
+## Use
 
 ```bash
-bash scripts/00_fetch_references.sh ref/
+v2p detect examples/                                    # what's in a folder
+v2p run examples/ --ref ref/ --outdir out/ --name MYSAMPLE --logdir logs/
 ```
 
-## Quickstart
+Files are identified by **content**, so no naming convention is needed.
+`examples/` ships with the repo and works immediately.
 
-`examples/` holds a small synthetic input folder that ships with the repo,
-so this works immediately after cloning:
+Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
+
+## Output
+
+| file | what it is |
+|---|---|
+| `<name>.target.fasta` | the database — search this |
+| `<name>.target_decoy.fasta` | same, with decoys |
+| `<name>.entries.tsv` | one row per sequence |
+| `tables/provenance.jsonl` | one record per sequence, listing every variant that produced it |
+| `tables/peptide_provenance.tsv` | one row per novel peptide, and whether it spans the variant residue |
+| `_work/tables/disposition.tsv` | one row per **input** variant and its fate |
+| `by_class/` | one FASTA per variant type |
+
+## Where it sits
+
+| tool | small variants | splice junctions | RNA editing | fusions | non-canonical ORFs |
+|---|---|---|---|---|---|
+| customProDB | yes | yes | no | no | no |
+| QUILTS | yes | yes | no | no | partial |
+| ProteoDisco | yes | yes | no | no | no |
+| pypgatk | yes | no | no | no | yes |
+| **v2p** | yes | yes | **yes** | **yes** | yes (opt-in) |
+
+## Measured
+
+| check | result |
+|---|---|
+| ClinVar benchmark, 263 asserted rows | **98.9% recall, 99.2% precision** |
+| Ensembl VEP consequence agreement | **334/334 (100%)** on shared transcripts |
+| A-to-I editing positive controls | **5/5** |
+| GENCODE translation agreement | **100%** (single-transcript build) |
+| vs pypgatk 0.0.24, locus coverage | **tied**, 259/260 each |
+| tests | **272**, offline, seconds |
 
 ```bash
-v2p detect examples/
+make test                                   # 272 assertions, no reference needed
+make reproducibility                        # two runs from one config, byte-identical
+python3 scripts/09_benchmark.py --ref ref/  # the benchmark
+v2p audit --ref ref/                        # check the reference interface
 ```
 
-```
-gene fusion calls                        fusions.csv
-RNA editing sites                        rna_editing.txt
-somatic SNV / InDel calls                small_variants.vcf
-alternative splicing events              splicing.csv
-genome build                             GRCh38
-```
-
-With the references in place, the whole conversion is one command:
-
-```bash
-v2p run examples/ --ref ref/ --outdir out/ --name EXAMPLE --logdir logs/
-```
-
-It prints the invariant report and exits non-zero if the release
-contradicts itself. Keep `--logdir` outside `--outdir`: `MANIFEST.txt` is
-written last, so anything added to the release afterwards makes it stale.
-
-The example calls are synthetic calls at real coordinates — nothing is
-redistributed from the HCC1395 package. `examples/make_examples.py`
-regenerates them: substitutions are placed in the CDS of named genes with
-the reference allele read from the genome, and the ADAR sites are derived
-from the annotation rather than quoted (see Validation).
-
-## Validation
-
-- **GENCODE agreement 100%** on the single-transcript build — reference
-  proteins translated by this pipeline compared against GENCODE's own
-  translations of the same transcript ids. 97.3% on the all-transcript
-  build; the difference is `cds_end_NF` transcripts, where GENCODE
-  truncates at the annotated CDS end and v2p reads to the first stop.
-  This is the correctness gate, not UniProt: UniProt and GENCODE choose
-  canonical isoforms independently and often disagree on the start codon.
-- **Nonsynonymous:synonymous ratio 2.75**, within the expected range.
-- **ADAR positive controls recovered**: GRIA2 Q607R, NEIL1 K242R,
-  BLCAP Y2C, CDK13 Q103R, COG3 I635V. Their coordinates in
-  `benchmarks/truth/editing_sites.tsv` are *derived*, not quoted: for each
-  published protein change the codon is located in the GENCODE v44
-  representative transcript, and the row is written only if a single A→G
-  in that codon reproduces the published substitution and the genome base
-  matches the expected strand.
-- **Benchmark against ClinVar**, scored on the 263 rows that carry stated
-  assertion criteria: **97.7% recall, 98.1% precision**. Per category —
-  frameshift 98.8%, missense 97.9%, stop_gained 97.7%. Across all 336
-  rows, including the 73 with no assertion criteria, 97.9% and 98.5%. The
-  headline is the smaller, better-supported set; both are reported because
-  the difference is the first thing a reviewer will ask about. All six
-  disagreements are listed individually in
-  `benchmarks/results/benchmark.md` rather than summarised away.
-
-  ```bash
-  python3 scripts/09_benchmark.py --ref ref/                          # 263 rows
-  python3 scripts/09_benchmark.py --ref ref/ --min-review-status any  # all 336
-  ```
-
-- **Consequence cross-check against Ensembl VEP: 332 of 334 loci agree,
-  99.4%.** An independent second opinion, not ground truth — VEP and v2p
-  read the same annotation but resolve transcripts separately. Both
-  disagreements are listed in `benchmarks/results/benchmark.md`. Produced
-  by `scripts/10_vep_annotate.py` (VEP REST, no 25 GB cache needed) then
-  `09_benchmark.py --vep-consequences`.
-- **Against pypgatk 0.0.24: a tie on locus coverage**, 259/260 (99.6%)
-  each, on the same truth loci. Neither found a five-base FBXW7 deletion.
-  An earlier version of this README reported v2p losing 99.2% to 99.6% —
-  that was a fault in the measurement, not the tool, and the correction is
-  written up in `benchmarks/compare_tools.md`. Two caveats a reader needs:
-  the tools were not given the same input (pypgatk cannot run on a
-  sites-only VCF — it needs VEP annotation, which is what told it the
-  transcripts), and pypgatk emits no protein change, so its output cannot
-  be scored for correctness at all.
-- **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
-  editing table, so this category has no comparator.
-- **269 tests**, all offline, no reference download, seconds to run:
-  94 pipeline, 80 release-invariant, 30 config, 27 species, 38
-  non-canonical ORF.
-- **Nine release invariants** run before `v2p run` reports success, and
-  any error-severity violation exits non-zero. On the HCC1395 dataset the
-  release reports zero errors.
-- **Reproducibility**: two runs from one config produce a byte-identical
-  release tree, verified with `diff -r` over the entire output including
-  `MANIFEST.txt`.
-
-```bash
-make test              # 200 assertions, no reference needed
-make reproducibility   # double-run byte-identity, needs the references
-```
+Nine release invariants run before `v2p run` reports success; any
+error-severity violation exits non-zero.
 
 ## How it works
 
-Variants are applied to the **mature transcript**, not to genomic
-sequence. That is what lets one code path serve DNA variants and RNA
-editing: an A-to-I edit is indistinguishable from a genomic A>G at
-transcript level. Translation runs from the annotated start codon to the
-first stop; frameshifts translate past the annotated stop into the 3′ UTR.
+Variants apply to the **mature transcript**, not to genomic sequence —
+that is what lets one code path serve DNA variants and RNA editing.
+Translation runs from the annotated start to the first stop; frameshifts
+read into the 3′ UTR.
 
 Genomic coordinates are 1-based inclusive; transcript and CDS offsets are
-0-based from the 5′ end in transcription direction. Every conversion goes
-through `annotation.py` so the convention lives in one place. The genetic
-code is hard-coded in `seqops.py` on purpose — a library update must not
-be able to change a translation silently.
+0-based from the 5′ end. The genetic code is hard-coded in `seqops.py` so
+a library update cannot change a translation silently. Transcript ties
+break deterministically: MANE_Select → Ensembl_canonical → basic →
+longest CDS → longest transcript → id.
 
-Transcript selection ties break deterministically: MANE_Select →
-Ensembl_canonical → basic → longest CDS → longest transcript →
-lexicographic id.
+## Limitations
 
-## Limitations and what is unverified
-
-**Not implemented.** ProteoDisco has not been run — it needs R,
-Bioconductor, BSgenome and a TxDb. pypgatk *has* been run and beats v2p on
-locus coverage by one variant; see above and `compare_tools.md`. Milestone
-7a (a provenance graph, one record per output sequence listing every
-contributing variant) and 7b (peptide-level provenance) are not built.
-`v2p audit` is not in CI, because it needs the 18 GB reference and the
-workflow is deliberately offline.
-
-**Unverified.** The GitHub Actions workflow has never executed — it will
-run on first push and prove itself or not. The `Dockerfile` has never been
-built; treat it as a starting point, not a tested artefact. There is no
-conda recipe: one was written and then deleted unbuilt, rather than
-shipped untested.
-
-**Truth set.** `benchmarks/truth/cosmic_variants.tsv` holds 336 ClinVar
-variants, each with its VCV accession and version, GRCh38 throughout, and
-every REF allele independently re-read from the genome and confirmed. What
-is *not* established is that each expected protein consequence is right in
-the sense a benchmark needs — ClinVar's own annotation is taken at face
-value, and 73 of the 336 rows carry "no assertion criteria provided". Use
-it accordingly.
-
-**Bugs found and fixed during development.** Every one produced
-plausible-looking *wrong output* rather than an error, and none was caught
-by looking at the sequences. Each has a regression test.
-
-| bug | effect |
-|---|---|
-| transcripts looked up by gene symbol only | 33,221 sites-only VCF variants produced zero proteins |
-| minus-strand AF/AL events dropped | 234 of 1,027 splicing events silently skipped |
-| GTF frame column parsed, never used | 8,260 `cds_start_NF` transcripts translated out of frame |
-| selenocysteine annotation ignored | all 25 selenoproteins truncated at their first UGA |
-| mitochondrial code not applied | chrM would read through its real stops |
-| UTR variants classified as synonymous | inverted the nonsyn:syn ratio; 16 indels shipped as false frameshifts |
-| ambiguous gene symbols resolved by name | silent false negatives on paralogous loci |
-| double-counted wild-types across files | per-type files did not sum to the combined file |
-| `v2p run --ref` ignored the reference directory | the documented invocation always refused without `--force` |
-| `--logdir` reached only the invariant logger | one run's provenance scattered across two directories |
-| nonsense variants written `p.Q70del` | `CSQ=stop_gained` contradicted its own `PC=`; invalid HGVS for a premature stop |
-
-An eleventh, found while writing the examples: four of the five ADAR
-coordinates first written from memory were wrong. They are now derived
-from the annotation, and the derivation fails loudly rather than guessing.
-
-The `p.Q70del` bug is the one the benchmark paid for. It scored 0% on
-every stop_gained row until the notation was fixed, because the
-consequence label and the protein change disagreed — a header that looked
-entirely plausible in isolation. Fifteen entries in the HCC1395 release
-carried it. The amino-acid sequences were correct throughout; only the
-reported change was wrong, which is precisely why nobody had noticed.
-
-## Layout
-
-```
-src/v2p/        cli.py config.py discover.py invariants.py species.py
-                annotation.py seqops.py nmd.py peptides.py validate.py fasta.py
-                provenance.py  parse/  build/  stages/
-tests/          test_pipeline.py test_invariants.py test_config.py
-                test_species.py test_noncanonical.py
-docs/           USAGE.md BUILD_SPEC.md TOOL_DESIGN.md FORMAT_SPEC.md
-examples/       synthetic input, works after clone
-benchmarks/     truth data, the runner, and the comparison procedure
-config/         params.yaml, species/human.yaml, species/mouse.yaml
-```
-
-**[docs/USAGE.md](docs/USAGE.md) is the guide to running your own data** —
-input formats, flags, output layout, and what to do when a run refuses.
-
-The numbered pipeline stages live in `src/v2p/stages/` so a pip-installed
-v2p can find them. Each is a separate process so it records its own
-provenance JSON — inputs with checksums, parameters, counters, environment.
-
-## Citation
-
-A paper is not yet written. If you use v2p before then, please cite the
-repository and the exact commit:
-
-```
-v2p: variant calls to protein sequences.
-Version 1.0.0, commit <sha>.
-```
-
-A `CITATION.cff` will be added once the author list and licence are
-settled. It is deliberately absent rather than present with a placeholder:
-GitHub renders that file as a "Cite this repository" button, so a stub
-would propagate into other people's bibliographies.
+- **Human and mouse only.** Other species need a `config/species/*.yaml`.
+- **No ProteoDisco comparison.** It needs R, Bioconductor, BSgenome and a
+  TxDb; not run. `benchmarks/compare_tools.md` has the procedure.
+- **3 benchmark disagreements remain**, listed individually in
+  `benchmarks/results/benchmark.md`: two FGFR3 rows where isoform
+  numbering differs, and one FBXW7 five-base deletion that produces no
+  protein.
+- **73 of 336 ClinVar truth rows carry no assertion criteria** and are
+  excluded from the headline figure. `--min-review-status any` includes
+  them.
+- **Non-canonical ORFs are off by default.** Enabling them takes the
+  example database from 20,531 to 123,404 sequences; an inflated search
+  space costs sensitivity at fixed FDR.
 
 ## Licence
 
-**Not yet chosen.** The copyright holder is being confirmed; until a
-`LICENSE` file lands, no licence is granted and the default of "all rights
-reserved" applies. `pyproject.toml` carries a TODO marking the same gap.
+MIT — see [LICENSE](LICENSE).

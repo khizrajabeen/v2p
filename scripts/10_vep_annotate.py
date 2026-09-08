@@ -199,18 +199,29 @@ def main() -> int:
     if a.out_tsv:
         with open(a.out_tsv, "w", newline="\n", encoding="utf-8") as fh:
             fh.write("chrom\tpos\tref\talt\tvep_consequence\tvep_impact\t"
-                     "vep_transcript\tvep_gene\tvep_hgvsp\n")
+                     "vep_transcript\tvep_gene\tvep_hgvsp\t"
+                     "vep_per_transcript\n")
             for k in keys:
                 tcs = ann.get(k, [])
                 coding = [t for t in tcs
                           if t.get("biotype") == "protein_coding"] or tcs
                 if not coding:
-                    fh.write("\t".join(k) + "\t\t\t\t\t\n")
+                    fh.write("\t".join(k) + "\t\t\t\t\t\t\n")
                     continue
                 best = sorted(
                     coding,
                     key=lambda t: _RANK.get(
                         most_severe(t.get("consequence_terms")), 999))[0]
+                # Every transcript, not only the most severe one. Comparing
+                # a call against VEP's worst-anywhere consequence compares
+                # different transcripts and manufactures disagreements:
+                # MSH2 chr2:47471062 is missense on the MANE transcript,
+                # which is what ClinVar and v2p both say, and stop_gained
+                # on a different one.
+                per_tx = ";".join(
+                    f"{t.get('transcript_id', '')}:"
+                    f"{most_severe(t.get('consequence_terms'))}"
+                    for t in coding if t.get("transcript_id"))
                 fh.write("\t".join([
                     *k,
                     most_severe(best.get("consequence_terms")),
@@ -218,6 +229,7 @@ def main() -> int:
                     best.get("transcript_id", ""),
                     best.get("gene_symbol", ""),
                     best.get("hgvsp", ""),
+                    per_tx,
                 ]) + "\n")
         rl.add_output("consequence_table", a.out_tsv)
         print(f"wrote {a.out_tsv}")

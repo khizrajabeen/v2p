@@ -602,6 +602,31 @@ def main() -> int:
     check("regression: run without --ref still refuses rather than guessing",
           _cli.cmd_run(_ns(None)) == 2)
 
+    # ------------- regression: audit could not read its own package source
+    # The audit checks what the pipeline does by reading our own modules.
+    # The path was `parents[1] / "src" / "v2p" / ...`, correct while the
+    # stage scripts sat in scripts/ and silently wrong once they moved into
+    # src/v2p/stages/ - it resolved to src/v2p/src/v2p/..., the read raised
+    # OSError, and a bare except turned "cannot check" into "the pipeline
+    # does not do it". The audit then reported three long-fixed bugs as
+    # live, which would have failed the reference-audit workflow forever.
+    import importlib.util as _iu
+    _spec = _iu.spec_from_file_location(
+        "v2p_audit",
+        ROOT / "src" / "v2p" / "stages" / "00_audit_references.py")
+    _aud = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_aud)
+
+    for _rel, _needle in (("annotation.py", "cds_phase_first"),
+                          ("seqops.py", "CODON_TABLE_MITO"),
+                          ("build/smallvar.py", "representative_at")):
+        try:
+            _got = _needle in _aud._pkg_source(_rel)
+        except OSError as _e:
+            _got = f"OSError: {_e}"
+        check(f"regression: the audit can read its own {_rel}",
+              _got is True, str(_got))
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILURES:")

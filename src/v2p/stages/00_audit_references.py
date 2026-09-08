@@ -56,6 +56,22 @@ def opener(p: Path):
 
 # --------------------------------------------------------------------------
 
+
+def _pkg_source(rel: str) -> str:
+    """Read one of our own modules, to check what the pipeline does.
+
+    The audit lives inside the package, so its sources are siblings. This
+    used to be spelled `parents[1] / "src" / "v2p" / ...`, which was right
+    when the stage scripts sat in scripts/ at the repo root and silently
+    wrong after they moved into src/v2p/stages/: the path resolved to
+    src/v2p/src/v2p/..., the read raised OSError, and a bare `except`
+    turned "cannot check" into "the pipeline does not do it". The audit
+    then reported three fixed bugs as live. Raising here is deliberate -
+    a check that cannot run must say so, not answer no.
+    """
+    return (Path(__file__).resolve().parents[1] / rel).read_text(
+        encoding="utf-8")
+
 def audit_gtf(path: Path) -> None:
     head(f"GTF — {path.name}")
     feats = Counter()
@@ -109,8 +125,7 @@ def audit_gtf(path: Path) -> None:
     print(f"  features: {dict(feats)}")
     if feats.get("Selenocysteine"):
         try:
-            src = (Path(__file__).resolve().parents[1]
-                   / "src" / "v2p" / "annotation.py").read_text()
+            src = _pkg_source("annotation.py")
             uses_sec = "Selenocysteine" in src
         except OSError:
             uses_sec = False
@@ -142,8 +157,7 @@ def audit_gtf(path: Path) -> None:
         # defect. What matters is whether the pipeline applies it.
         applied = False
         try:
-            src = (Path(__file__).resolve().parents[1]
-                   / "src" / "v2p" / "annotation.py").read_text()
+            src = _pkg_source("annotation.py")
             applied = "off + self.cds_phase_first" in src
         except OSError:
             pass
@@ -180,8 +194,7 @@ def audit_gtf(path: Path) -> None:
     # -- assumption 5: mitochondrial genetic code ------------------------
     if mito:
         try:
-            src = (Path(__file__).resolve().parents[1]
-                   / "src" / "v2p" / "seqops.py").read_text()
+            src = _pkg_source("seqops.py")
             has_mito = "CODON_TABLE_MITO" in src
         except OSError:
             has_mito = False
@@ -200,8 +213,7 @@ def audit_gtf(path: Path) -> None:
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
         from v2p.annotation import Annotation
-        src = (Path(__file__).resolve().parents[1]
-               / "src" / "v2p" / "build" / "smallvar.py").read_text()
+        src = _pkg_source("build/smallvar.py")
         resolves = "representative_at" in src
         ann = Annotation.from_gtf(path, coding_only=True)
         amb = ann.ambiguous_gene_names()
