@@ -29,7 +29,14 @@ recorded reason.
 - **Byte-identical reproducibility** — two runs from one config produce
   the same release, verified over the whole tree.
 - **Non-canonical ORFs** — three-frame translation of lncRNAs,
-  pseudogenes and UTRs. Opt-in; see the warning below.
+  pseudogenes, and 5′/3′ UTRs of coding transcripts (uORFs and dORFs),
+  with the reading frame recorded per entry and a configurable length
+  floor. Entries identical to a reference protein are dropped rather than
+  duplicating the database. Opt-in with `--include-noncanonical`, since
+  three-frame translation multiplies database size.
+- **Multi-assembly** — GRCh38, GRCh37 and T2T-CHM13 all fetchable and
+  supported, with the build asserted by contig length before translation
+  starts.
 - **Multi-species** — human, mouse, rat and zebrafish ship; others are one
   YAML file.
 - **Search-engine compatible** — four header conventions (UniProt, PEFF,
@@ -46,8 +53,16 @@ Python 3.10–3.13. The only runtime dependency is `pyfaidx`.
 Then fetch a reference once:
 
 ```bash
-bash scripts/00_fetch_references.sh ref/      # GRCh38 + GENCODE v44, ~18 GB
+bash scripts/00_fetch_references.sh ref/                     # GRCh38, the default
+bash scripts/00_fetch_references.sh ref37/  --assembly GRCh37
+bash scripts/00_fetch_references.sh reft2t/ --assembly T2T
 ```
+
+Each downloads the genome, annotation and — where the source publishes
+them — the annotation's own protein translations, then asserts the build
+by contig length before you spend an hour translating against the wrong
+one. `GENCODE_RELEASE=45 bash scripts/00_fetch_references.sh ref/` picks a
+different release.
 
 ## Quick start
 
@@ -87,7 +102,7 @@ file:
 | `--annotation <gtf>` | GTF/GFF annotation, explicit |
 | `--proteome <fa>` | reference proteome FASTA, explicit |
 | `--translations <fa>` | the annotation source's own protein translations |
-| `--species <name\|yaml>` | human, mouse, rat, zebrafish, or a YAML path |
+| `--species <name\|yaml>` | `human`, `human_grch37`, `human_t2t`, `mouse`, `rat`, `zebrafish`, or a YAML path |
 
 ```bash
 # a different assembly or release, no --ref at all
@@ -207,21 +222,11 @@ longest CDS → longest transcript → id.
 
 ## Limitations
 
-- **Vertebrates only.** Human, mouse, rat and zebrafish ship; any other
-  vertebrate is one `config/species/*.yaml`. Only genetic-code tables 1
-  and 2 are implemented, so a species needing the invertebrate (5) or
-  yeast (3) mitochondrial table is **refused** rather than silently
-  translated with the wrong one.
-- **Non-canonical ORFs are off by default**, and should stay off unless
-  you are specifically hunting lncRNA or uORF peptides. Enabling them
-  takes the example database from 20,531 to 175,552 sequences — 8.5×,
-  after entries identical to a reference protein are already dropped. An
-  inflated search space costs sensitivity at fixed FDR. A documented
-  tradeoff, not a defect.
 - **2 benchmark disagreements remain**, both the same FGFR3 variant
   (duplicated in the truth set) where isoform numbering differs.
-- **No ProteoDisco number yet.** The driver and install route are in
-  `benchmarks/compare_tools.md`; the run has not completed here.
+- **Only genetic-code tables 1 and 2 are implemented.** A species needing
+  the invertebrate (5) or yeast (3) mitochondrial table is **refused**
+  rather than silently translated with the wrong one.
 
 ## Documentation
 

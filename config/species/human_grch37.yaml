@@ -1,0 +1,13 @@
+# Human on GRCh37/hg19. Same organism as human.yaml; the difference is the
+# assembly, which changes the contig lengths the reference audit asserts.
+# Use with: --species human_grch37
+scientific_name: Homo sapiens
+common_name: human
+taxon_id: 9606
+entry_suffix: HUMAN
+assembly: GRCh37
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2
+contig_lengths:
+  chr1: 249250621
+  chr2: 243199373

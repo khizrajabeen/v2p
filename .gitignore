@@ -61,3 +61,6 @@ htmlcov/
 
 # Benchmark run output (the truth data under benchmarks/truth/ IS tracked)
 benchmarks/results/
+
+# pypgatk writes these into the working directory
+ensembl_translation-*.log

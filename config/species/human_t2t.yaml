@@ -1,0 +1,13 @@
+# Human on T2T-CHM13v2.0 (UCSC hs1). Lengths are from the assembly's own
+# chrom.sizes. Use with: --species human_t2t
+scientific_name: Homo sapiens
+common_name: human
+taxon_id: 9606
+entry_suffix: HUMAN
+assembly: T2T-CHM13v2.0
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2
+contig_lengths:
+  chr1: 248387328
+  chr2: 242696752
+  chr3: 201105948
