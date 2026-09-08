@@ -58,3 +58,6 @@ htmlcov/
 
 # M2 reproducibility harness output
 .repro/
+
+# Benchmark run output (the truth data under benchmarks/truth/ IS tracked)
+benchmarks/results/

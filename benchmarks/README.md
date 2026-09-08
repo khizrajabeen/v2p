@@ -1,8 +1,28 @@
 # Benchmark truth sets
 
-Truth data only. **There is no benchmark runner yet**, so no precision or
-recall figure has been computed from these files and v2p makes no accuracy
-claim. Read that before citing anything here.
+Truth data, and the runner that scores against it.
+
+```bash
+python3 scripts/09_benchmark.py --ref ref/                          # 263 rows
+python3 scripts/09_benchmark.py --ref ref/ --min-review-status any  # all 336
+```
+
+Latest result: **97.3% recall, 98.1% precision** on the 263 small-variant
+rows with stated assertion criteria; 97.9% and 98.5% across all 336.
+A-to-I editing 5 of 5. Full report, including every disagreement, in
+`results/benchmark.md`.
+
+This scores v2p against a truth set. It is **not** a comparison against
+ProteoDisco or pypgatk — neither has been run — so it supports no claim to
+beat another tool.
+
+Two things worth knowing about how it scores. Matching is on locus plus
+protein change, not transcript id, because the truth set records RefSeq
+transcripts while the pipeline works in GENCODE, and mapping between them
+would add a second source of error to the measurement. And a frameshift
+written `p.M862fs` by ClinVar is accepted as matching `p.M862Ifs*4` from
+v2p — the same event at different precision. A different residue,
+position, or consequence class is never forgiven.
 
 ## `truth/cosmic_variants.tsv` — 336 small variants
 
@@ -51,5 +71,7 @@ TMPRSS2–ERG could not be verified to the standard of the two files above,
 and an unverified fusion truth set is worse than none. The three fusions
 in `examples/fusions.csv` are illustrative input, not truth data.
 
-`scripts/09_benchmark.py` — the runner that would consume these files and
-report per-category precision and recall — is also not written.
+`compare_tools.md`, specified in `docs/BUILD_SPEC.md`, is not written: it
+would require installing ProteoDisco and pypgatk and running the same
+truth set through them, which has not been done. Until it is, v2p's
+figures stand alone and imply nothing about the competition.

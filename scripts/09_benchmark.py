@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Stage 9 - run the pipeline over the truth sets and score it.
+
+Reports per-category recall and precision, and every disagreement with its
+expected and observed value. A benchmark that only flatters is worthless,
+so disagreements are listed in full rather than summarised away.
+
+    python scripts/09_benchmark.py --ref ref/ --outdir benchmarks/results
+
+Review status matters. ClinVar rows carry the submitter's assertion level,
+and 73 of the 336 small-variant rows are "no assertion criteria provided" -
+a submission with no stated evidence behind it. Scoring against those moves
+the figure for reasons that have nothing to do with this tool, so they are
+excluded by default and reported separately. `--min-review-status any`
+scores everything.
+
+Matching is on locus plus protein change, not on transcript id: the truth
+set records RefSeq transcripts (NM_...) while the pipeline works in
+GENCODE (ENST...), and mapping between them would introduce a second
+source of error into the measurement. A truth row counts as recovered when
+some output entry at that locus carries the expected protein change.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import re
+import subprocess
+import sys
+import tempfile
+from collections import Counter, defaultdict
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from v2p.provenance import RunLogger                       # noqa: E402
+
+TRUTH = ROOT / "benchmarks" / "truth"
+
+# ClinVar review status, weakest first.
+REVIEW_RANK = {
+    "no assertion criteria provided": 0,
+    "no assertion provided": 0,
+    "criteria provided, conflicting interpretations": 1,
+    "criteria provided, conflicting classifications": 1,
+    "criteria provided, single submitter": 2,
+    "criteria provided, multiple submitters, no conflicts": 3,
+    "reviewed by expert panel": 4,
+    "practice guideline": 5,
+}
+LEVELS = {
+    "any": -1,
+    "asserted": 1,          # anything with stated criteria - the default
+    "single": 2,
+    "multiple": 3,
+    "expert": 4,
+    "guideline": 5,
+}
+
+
+def read_truth(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    with open(path, encoding="utf-8") as fh:
+        lines = [ln for ln in fh if not ln.startswith("#")]
+    return list(csv.DictReader(lines, delimiter="\t"))
+
+
+def rank_of(row: dict) -> int:
+    return REVIEW_RANK.get(
+        (row.get("clinvar_review_status") or "").strip().lower(), 0)
+
+
+def kv(header: str) -> dict[str, str]:
+    out = {}
+    for tok in header.split():
+        if "=" in tok:
+            k, v = tok.split("=", 1)
+            out[k] = v
+    return out
+
+
+_FS = re.compile(r"^([a-z])(\d+)(?:[a-z])?fs(?:\*\d+)?$")
+
+
+def norm_change(p: str) -> str:
+    """Normalise a protein change for comparison.
+
+    Lower-cased, `p.` stripped, and `*`/`Ter`/`X` unified, because the two
+    sources spell a stop three different ways and a spelling difference is
+    not a disagreement worth reporting.
+    """
+    s = (p or "").strip()
+    s = s[2:] if s.lower().startswith("p.") else s
+    s = s.replace("Ter", "*").replace("ter", "*")
+    if s.endswith("X"):
+        s = s[:-1] + "*"
+    return s.lower()
+
+
+def equivalent(want: str, got: str) -> bool:
+    """Whether two normalised protein changes describe the same event.
+
+    Exact string equality is too strict to be honest here. ClinVar writes a
+    frameshift as `p.M862fs` - first affected residue only - while v2p
+    writes the fuller `p.M862Ifs*4`, naming the substituted residue and the
+    distance to the new stop. Those are the same event described at
+    different precision, and scoring the second as a miss would report a
+    tool failure that did not happen.
+
+    What is *not* forgiven: a different residue, a different position, or a
+    different class of consequence.
+    """
+    if want == got:
+        return True
+    a, b = _FS.match(want), _FS.match(got)
+    if a and b:
+        return a.group(1) == b.group(1) and a.group(2) == b.group(2)
+    return False
+
+
+def write_inputs(folder: Path, small: list[dict], editing: list[dict]) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    if small:
+        with open(folder / "truth_variants.vcf", "w", newline="\n") as fh:
+            fh.write("##fileformat=VCFv4.2\n##reference=GRCh38\n")
+            for c in sorted({r["chrom"] for r in small}):
+                fh.write(f"##contig=<ID={c}>\n")
+            fh.write('##INFO=<ID=GENE,Number=1,Type=String,Description="Gene">\n')
+            fh.write("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n")
+            for r in sorted(small, key=lambda x: (x["chrom"], int(x["pos"]))):
+                fh.write(f"{r['chrom']}\t{r['pos']}\t.\t{r['ref']}\t"
+                         f"{r['alt']}\t.\tPASS\tGENE={r['gene']}\n")
+    if editing:
+        cols = ["Chr", "Start", "End", "Ref", "Alt", "Func.refGene",
+                "Gene.refGene", "GeneDetail.refGene", "ExonicFunc.refGene",
+                "AAChange.refGene"]
+        with open(folder / "truth_editing.txt", "w", newline="\n") as fh:
+            fh.write("\t".join(cols) + "\n")
+            for r in editing:
+                fh.write("\t".join([
+                    r["chrom"], r["pos"], r["pos"], r["ref"], r["alt"],
+                    "exonic", r["gene"], ".", "nonsynonymous SNV",
+                    f"{r['gene']}:{r.get('transcript', '.')}:.:.:"
+                    f"{r['expected_hgvs_p']}"]) + "\n")
+
+
+def observed_changes(fasta: Path) -> dict[str, set[str]]:
+    """locus -> the set of protein changes the pipeline produced there."""
+    got: dict[str, set[str]] = defaultdict(set)
+    with open(fasta, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.startswith(">"):
+                continue
+            f = kv(line.rstrip("\n"))
+            loc, pc = f.get("LOC"), f.get("PC")
+            if not loc or not pc:
+                continue
+            m = re.match(r"^(chr[^:]+):(\d+)", loc)
+            if m:
+                got[f"{m.group(1)}:{m.group(2)}"].add(norm_change(pc))
+    return got
+
+
+def score(truth: list[dict], got: dict[str, set[str]], expect_key: str):
+    """Return (per-class counters, list of disagreements)."""
+    per: dict[str, Counter] = defaultdict(Counter)
+    bad = []
+    for r in truth:
+        cls = r.get("consequence_class") or "editing"
+        key = f"{r['chrom']}:{r['pos']}"
+        want = norm_change(r.get(expect_key, ""))
+        per[cls]["truth"] += 1
+        seen = got.get(key)
+        if not seen:
+            per[cls]["no_entry"] += 1
+            bad.append((r, want, ""))
+        elif any(equivalent(want, g) for g in seen):
+            per[cls]["hit"] += 1
+        else:
+            per[cls]["wrong"] += 1
+            bad.append((r, want, ",".join(sorted(seen))[:60]))
+    return per, bad
+
+
+def table(per) -> list[str]:
+    out = ["| category | truth | recovered | wrong change | no entry "
+           "| recall | precision |",
+           "|---|---:|---:|---:|---:|---:|---:|"]
+    tot: Counter = Counter()
+    for cls in sorted(per):
+        c = per[cls]
+        tot.update(c)
+        attempted = c["hit"] + c["wrong"]
+        rec = c["hit"] / c["truth"] if c["truth"] else 0.0
+        pre = c["hit"] / attempted if attempted else 0.0
+        out.append(f"| {cls} | {c['truth']} | {c['hit']} | {c['wrong']} | "
+                   f"{c['no_entry']} | {rec:.1%} | {pre:.1%} |")
+    att = tot["hit"] + tot["wrong"]
+    out.append(f"| **all** | {tot['truth']} | {tot['hit']} | {tot['wrong']} | "
+               f"{tot['no_entry']} | "
+               f"{tot['hit'] / tot['truth'] if tot['truth'] else 0:.1%} | "
+               f"{tot['hit'] / att if att else 0:.1%} |")
+    return out
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--ref", required=True,
+                    help="directory holding genome, annotation, proteome")
+    ap.add_argument("--outdir", default="benchmarks/results")
+    ap.add_argument("--logdir", default="logs")
+    ap.add_argument("--workdir", help="keep the intermediate run here")
+    ap.add_argument("--min-review-status", default="asserted",
+                    choices=sorted(LEVELS),
+                    help="minimum ClinVar review status to score. Default "
+                         "'asserted' excludes rows with no assertion "
+                         "criteria; 'any' scores every row.")
+    a = ap.parse_args()
+
+    out = Path(a.outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    rl = RunLogger("09_benchmark", a.logdir)
+    rl.add_params(min_review_status=a.min_review_status, ref=a.ref)
+
+    small_all = read_truth(TRUTH / "cosmic_variants.tsv")
+    editing = read_truth(TRUTH / "editing_sites.tsv")
+    if not small_all and not editing:
+        print(f"no truth files in {TRUTH}", file=sys.stderr)
+        rl.close(status="error")
+        return 2
+
+    floor = LEVELS[a.min_review_status]
+    small = [r for r in small_all if rank_of(r) >= floor]
+    excluded = len(small_all) - len(small)
+    rl.count("truth.small_total", len(small_all))
+    rl.count("truth.small_scored", len(small))
+    rl.count("truth.editing", len(editing))
+    print(f"small variants: {len(small)} of {len(small_all)} scored "
+          f"({excluded} below --min-review-status {a.min_review_status})")
+    print(f"editing sites:  {len(editing)}")
+
+    work = Path(a.workdir) if a.workdir else Path(tempfile.mkdtemp())
+    inputs = work / "inputs"
+    write_inputs(inputs, small_all, editing)   # every row is run once
+
+    print("running the pipeline over the truth set ...")
+    cmd = [sys.executable, str(ROOT / "scripts" / "v2p"), "run", str(inputs),
+           "--ref", a.ref, "--outdir", str(work / "release"),
+           "--name", "TRUTH", "--logdir", str(work / "logs"),
+           "--decoys", "none", "--no-reference"]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    fastas = sorted((work / "release").glob("*.target.fasta"))
+    if not fastas:
+        sys.stderr.write(p.stdout[-3000:] + "\n" + p.stderr[-3000:] + "\n")
+        rl.close(status="error")
+        print("the pipeline produced no FASTA; see the output above",
+              file=sys.stderr)
+        return 1
+
+    got = observed_changes(fastas[0])
+    per_s, bad_s = score(small, got, "expected_hgvs_p_1letter")
+    per_e, bad_e = score(editing, got, "expected_hgvs_p")
+    per_full, _ = score(small_all, got, "expected_hgvs_p_1letter")
+
+    L = ["# v2p benchmark", "",
+         f"Scored with `--min-review-status {a.min_review_status}`: "
+         f"{len(small)} of {len(small_all)} small-variant rows "
+         f"({excluded} excluded).", "",
+         "Matching is on locus plus protein change. The truth set records "
+         "RefSeq transcripts and the pipeline works in GENCODE, so a row "
+         "counts as recovered when some entry at that locus carries the "
+         "expected change.", "",
+         "## Small variants (headline)", ""]
+    L += table(per_s)
+    L += ["", "## Small variants, all rows including unasserted (secondary)",
+          "", f"All {len(small_all)} rows, including the {excluded} with no "
+          "stated assertion criteria. Reported for completeness; the "
+          "headline figure above is the defensible one.", ""]
+    L += table(per_full)
+    if editing:
+        L += ["", "## A-to-I RNA editing", "",
+              "No competing tool accepts an editing table, so this category "
+              "has no comparator.", ""]
+        L += table(per_e)
+
+    L += ["", "## Disagreements", ""]
+    if not (bad_s + bad_e):
+        L.append("None.")
+    else:
+        L += ["| locus | gene | expected | observed |", "|---|---|---|---|"]
+        for r, want, seen in (bad_s + bad_e):
+            L.append(f"| {r['chrom']}:{r['pos']} | {r.get('gene', '')} | "
+                     f"{want} | {seen or '(no protein produced)'} |")
+
+    rep = out / "benchmark.md"
+    rep.write_text("\n".join(L) + "\n", encoding="utf-8")
+    rl.add_output("report", rep)
+
+    print()
+    print("\n".join(table(per_s)))
+    hit = sum(per_s[c]["hit"] for c in per_s)
+    n = sum(per_s[c]["truth"] for c in per_s)
+    print(f"\nsmall-variant recall (headline): {hit / n if n else 0:.1%}")
+    print(f"disagreements: {len(bad_s) + len(bad_e)} (all listed in {rep})")
+    rl.count("small.hit", hit)
+    rl.count("small.truth", n)
+    rl.close()
+    if not a.workdir:
+        print(f"intermediate run kept at {work}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

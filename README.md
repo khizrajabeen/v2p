@@ -93,8 +93,24 @@ from the annotation rather than quoted (see Validation).
   representative transcript, and the row is written only if a single A→G
   in that codon reproduces the published substitution and the genome base
   matches the expected strand.
-- **200 tests**, all offline, no reference download, seconds to run:
-  93 pipeline, 80 release-invariant, 27 config.
+- **Benchmark against ClinVar**, scored on the 263 rows that carry stated
+  assertion criteria: **97.3% recall, 98.1% precision**. Per category —
+  frameshift 98.8%, stop_gained 97.7%, missense 96.8%. Across all 336
+  rows, including the 73 with no assertion criteria, 97.9% and 98.5%. The
+  headline is the smaller, better-supported set; both are reported because
+  the difference is the first thing a reviewer will ask about. All seven
+  disagreements are listed individually in
+  `benchmarks/results/benchmark.md` rather than summarised away.
+
+  ```bash
+  python3 scripts/09_benchmark.py --ref ref/                          # 263 rows
+  python3 scripts/09_benchmark.py --ref ref/ --min-review-status any  # all 336
+  ```
+
+- **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
+  editing table, so this category has no comparator.
+- **201 tests**, all offline, no reference download, seconds to run:
+  94 pipeline, 80 release-invariant, 27 config.
 - **Nine release invariants** run before `v2p run` reports success, and
   any error-severity violation exits non-zero. On the HCC1395 dataset the
   release reports zero errors.
@@ -131,9 +147,10 @@ lexicographic id.
 lncRNAs and pseudogenes) — the one capability where pypgatk is genuinely
 ahead. Species independence: `_HUMAN` entry names, `OS=Homo sapiens
 OX=9606` and GRCh38 contig lengths are still hard-coded, so this is a
-human-only tool today. There is no benchmark runner: `benchmarks/truth/`
-holds the truth data but no script consumes it, so no precision or recall
-figure has been computed and no accuracy claim is made.
+human-only tool today. No comparison against ProteoDisco or pypgatk has
+been run: the benchmark scores v2p against a truth set, not against a
+competitor, so "97.3% recall" is a statement about this tool alone and not
+a claim to beat anything.
 
 **Unverified.** The GitHub Actions workflow has never executed — it will
 run on first push and prove itself or not. The `Dockerfile` has never been
@@ -165,10 +182,18 @@ by looking at the sequences. Each has a regression test.
 | double-counted wild-types across files | per-type files did not sum to the combined file |
 | `v2p run --ref` ignored the reference directory | the documented invocation always refused without `--force` |
 | `--logdir` reached only the invariant logger | one run's provenance scattered across two directories |
+| nonsense variants written `p.Q70del` | `CSQ=stop_gained` contradicted its own `PC=`; invalid HGVS for a premature stop |
 
 An eleventh, found while writing the examples: four of the five ADAR
 coordinates first written from memory were wrong. They are now derived
 from the annotation, and the derivation fails loudly rather than guessing.
+
+The `p.Q70del` bug is the one the benchmark paid for. It scored 0% on
+every stop_gained row until the notation was fixed, because the
+consequence label and the protein change disagreed — a header that looked
+entirely plausible in isolation. Fifteen entries in the HCC1395 release
+carried it. The amino-acid sequences were correct throughout; only the
+reported change was wrong, which is precisely why nobody had noticed.
 
 ## Layout
 
@@ -193,15 +218,17 @@ A paper is not yet written. If you use v2p before then, please cite the
 repository and the exact commit:
 
 ```
-v2p: variant calls to protein sequences. https://github.com/<owner>/v2p
+v2p: variant calls to protein sequences.
 Version 1.0.0, commit <sha>.
 ```
 
-See `CITATION.cff`.
+A `CITATION.cff` will be added once the author list and licence are
+settled. It is deliberately absent rather than present with a placeholder:
+GitHub renders that file as a "Cite this repository" button, so a stub
+would propagate into other people's bibliographies.
 
 ## Licence
 
 **Not yet chosen.** The copyright holder is being confirmed; until a
 `LICENSE` file lands, no licence is granted and the default of "all rights
-reserved" applies. `pyproject.toml` and `CITATION.cff` carry TODOs marking
-the same gap.
+reserved" applies. `pyproject.toml` carries a TODO marking the same gap.

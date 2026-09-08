@@ -138,6 +138,17 @@ def main() -> int:
           and recs[0].sequence == ref_plus[:6],
           f"{recs[0].consequence}/{recs[0].sequence}" if recs else "no record")
 
+    # ------------------------- regression: stop_gained written as a deletion
+    # A premature stop makes the alt protein end at `idx`, so the first
+    # difference landed past its end and the protein change fell through to
+    # the residue-deletion branch: a nonsense variant was reported as
+    # `p.Y7del`, contradicting its own CSQ=stop_gained. HGVS spells it
+    # `p.Tyr7Ter`, one-letter `p.Y7*`. Found by the benchmark, where it
+    # showed as 0% recall across all 87 scored stop_gained rows.
+    check("regression: stop_gained is written p.Y7*, not p.Y7del",
+          recs and recs[0].protein_change == "p.Y7*",
+          recs[0].protein_change if recs else "no record")
+
     # ---------------------------------------------------------- frameshift
     # delete 1 base at codon 6 -> everything downstream shifts
     p6 = gpos_plus(meta, "GPLUS", 6, 1)

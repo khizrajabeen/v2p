@@ -258,6 +258,15 @@ def build_small_variant_proteins(
             new_aa = alt_tr.protein[idx] if idx < len(alt_tr.protein) else "*"
             ext = len(alt_tr.protein) - idx
             pchange = f"p.{ref_tr.protein[idx]}{idx+1}{new_aa}fs*{ext}"
+        elif cons == "stop_gained" and idx < len(ref_tr.protein):
+            # A premature stop truncates the protein, so the alt sequence
+            # simply ends here and `idx` lands past its end. Without this
+            # branch it fell through to the `del` case below and produced
+            # `p.Q70del` - a single-residue deletion - for a nonsense
+            # variant, contradicting its own CSQ=stop_gained and
+            # misreporting the consequence to anyone reading the header.
+            # HGVS spells this `p.Gln70Ter`, one-letter `p.Q70*`.
+            pchange = f"p.{ref_tr.protein[idx]}{idx+1}*"
         elif idx < len(ref_tr.protein) and idx < len(alt_tr.protein):
             pchange = f"p.{ref_tr.protein[idx]}{idx+1}{alt_tr.protein[idx]}"
         elif idx < len(ref_tr.protein):

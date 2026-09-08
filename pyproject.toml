@@ -30,7 +30,11 @@ license = { text = "MIT" }
 
 # Email only: the repo carries no author name anywhere, and inventing one
 # would put a wrong name on a scientific artefact.
-authors = [{ email = "chen.q@wehi.edu.au" }]
+# TODO(owner): fill in before publishing, together with the licence below.
+# Left empty rather than guessed: this field is published verbatim as
+# package metadata on PyPI, so a placeholder or a stale address is worse
+# than an absent one. CITATION.cff was removed for the same reason.
+authors = []
 
 keywords = [
     "proteogenomics",
