@@ -1,0 +1,13 @@
+# Human. This is the default; the values here match v2p.species.HUMAN, and
+# tests/test_species.py asserts they stay in step.
+scientific_name: Homo sapiens
+common_name: human
+taxon_id: 9606
+entry_suffix: HUMAN
+assembly: GRCh38
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2
+contig_lengths:
+  chr1: 248956422
+  chr2: 242193529
+  chr17: 83257441

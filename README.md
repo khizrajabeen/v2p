@@ -20,14 +20,15 @@ where wrong answers hide.
 | QUILTS | 2016 | Python | yes | yes | no | no | partial | dormant |
 | ProteoDisco | 2021 | R/Bioconductor | yes | yes | no | no | no | maintained |
 | pypgatk / pgdb | 2021 | Python | yes | no | no | no | **yes** (3-frame) | maintained |
-| **v2p** | — | Python | yes | yes | **yes** | **yes** | no | this repo |
+| **v2p** | — | Python | yes | yes | **yes** | **yes** | yes (opt-in) | this repo |
 
 The claim worth making, and only this one: the first tool to build a single
 protein database from DNA variants, RNA editing, fusions and splicing
 together, with every input variant's fate recorded. Not "more accurate" —
 that needs a published benchmark this repo does not yet have. Not "better
-than VEP" — VEP is not a database builder. Three-frame translation of
-non-coding transcripts is a real gap where pypgatk is ahead.
+than VEP" — VEP is not a database builder. Three-frame translation of non-coding
+transcripts exists as of M5, but pypgatk had it first and has more
+mileage on it.
 
 ## Install
 
@@ -109,8 +110,9 @@ from the annotation rather than quoted (see Validation).
 
 - **A-to-I editing: 5 of 5 recovered, 100%.** No competing tool accepts an
   editing table, so this category has no comparator.
-- **201 tests**, all offline, no reference download, seconds to run:
-  94 pipeline, 80 release-invariant, 27 config.
+- **256 tests**, all offline, no reference download, seconds to run:
+  94 pipeline, 80 release-invariant, 27 config, 27 species, 28
+  non-canonical ORF.
 - **Nine release invariants** run before `v2p run` reports success, and
   any error-severity violation exits non-zero. On the HCC1395 dataset the
   release reports zero errors.
@@ -143,14 +145,13 @@ lexicographic id.
 
 ## Limitations and what is unverified
 
-**Not implemented.** Non-canonical ORFs (three-frame translation of
-lncRNAs and pseudogenes) — the one capability where pypgatk is genuinely
-ahead. Species independence: `_HUMAN` entry names, `OS=Homo sapiens
-OX=9606` and GRCh38 contig lengths are still hard-coded, so this is a
-human-only tool today. No comparison against ProteoDisco or pypgatk has
-been run: the benchmark scores v2p against a truth set, not against a
-competitor, so "97.3% recall" is a statement about this tool alone and not
-a claim to beat anything.
+**Not implemented.** `NC_UTR` is in the non-canonical vocabulary but
+nothing emits it: ORFs in the UTRs of coding transcripts are not searched,
+only whole non-coding transcripts. No comparison against ProteoDisco or
+pypgatk has been run — the benchmark scores v2p against a truth set, not
+against a competitor, so "97.3% recall" is a statement about this tool
+alone and not a claim to beat anything. `benchmarks/compare_tools.md` has
+the procedure and install commands, with the results table empty.
 
 **Unverified.** The GitHub Actions workflow has never executed — it will
 run on first push and prove itself or not. The `Dockerfile` has never been
@@ -198,15 +199,19 @@ reported change was wrong, which is precisely why nobody had noticed.
 ## Layout
 
 ```
-src/v2p/        cli.py config.py discover.py invariants.py
+src/v2p/        cli.py config.py discover.py invariants.py species.py
                 annotation.py seqops.py nmd.py peptides.py validate.py fasta.py
                 provenance.py  parse/  build/  stages/
 tests/          test_pipeline.py test_invariants.py test_config.py
-docs/           BUILD_SPEC.md TOOL_DESIGN.md FORMAT_SPEC.md
+                test_species.py test_noncanonical.py
+docs/           USAGE.md BUILD_SPEC.md TOOL_DESIGN.md FORMAT_SPEC.md
 examples/       synthetic input, works after clone
-benchmarks/     truth data (no runner yet)
-config/         params.yaml — generated, and tested to load
+benchmarks/     truth data, the runner, and the comparison procedure
+config/         params.yaml, species/human.yaml, species/mouse.yaml
 ```
+
+**[docs/USAGE.md](docs/USAGE.md) is the guide to running your own data** —
+input formats, flags, output layout, and what to do when a run refuses.
 
 The numbered pipeline stages live in `src/v2p/stages/` so a pip-installed
 v2p can find them. Each is a separate process so it records its own

@@ -20,6 +20,8 @@ test:
 	python3 tests/test_pipeline.py
 	python3 tests/test_invariants.py
 	python3 tests/test_config.py
+	python3 tests/test_species.py
+	python3 tests/test_noncanonical.py
 
 # M2 acceptance test. Needs the full reference, so it is deliberately not
 # part of `test`: two runs from one config must produce a byte-identical

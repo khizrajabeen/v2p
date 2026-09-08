@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from .build.smallvar import ProteinRecord
+from .species import HUMAN, Species
 
 # variant-type vocabulary emitted in headers (stable, documented values)
 VARIANT_TYPE_VOCAB = {
@@ -55,7 +56,8 @@ def wrap(seq: str, width: int = 60) -> str:
 # header formatters
 # --------------------------------------------------------------------------
 
-def header_descriptive(r: ProteinRecord, prefix: str) -> str:
+def header_descriptive(r: ProteinRecord, prefix: str,
+                       species: Species = HUMAN) -> str:
     """Pipe-delimited, self-documenting. Safe default."""
     fields = [
         f"{prefix}|{sanitize_id(r.seq_id)}",
@@ -78,7 +80,8 @@ def header_descriptive(r: ProteinRecord, prefix: str) -> str:
     return ">" + " ".join(fields)
 
 
-def header_peff(r: ProteinRecord, prefix: str) -> str:
+def header_peff(r: ProteinRecord, prefix: str,
+                species: Species = HUMAN) -> str:
     """PSI Extended FASTA Format entry line.
 
     Simple substitutions are encoded with \\VariantSimple=(pos|newAA);
@@ -92,8 +95,8 @@ def header_peff(r: ProteinRecord, prefix: str) -> str:
     parts.append(f"\\PName={pname}")
     if r.gene:
         parts.append(f"\\GName={r.gene}")
-    parts.append("\\TaxName=Homo sapiens")
-    parts.append("\\NcbiTaxId=9606")
+    parts.append(f"\\TaxName={species.scientific_name}")
+    parts.append(f"\\NcbiTaxId={species.taxon_id}")
     parts.append(f"\\Length={len(r.sequence)}")
     if r.consequence in ("missense", "stop_gained") and r.variant_pos_aa:
         new_aa = r.sequence[r.variant_pos_aa - 1] if r.variant_pos_aa <= len(r.sequence) else "X"
@@ -117,7 +120,8 @@ def header_peff(r: ProteinRecord, prefix: str) -> str:
     return " ".join(parts)
 
 
-def header_pvac(r: ProteinRecord, prefix: str) -> str:
+def header_pvac(r: ProteinRecord, prefix: str,
+                species: Species = HUMAN) -> str:
     """Compact neoantigen-pipeline style: >MT.GENE.TX.consequence.change"""
     tag = "WT" if r.variant_class == "REFERENCE" else "MT"
     bits = [tag, r.gene or "NA", r.transcript or "NA",
@@ -127,7 +131,8 @@ def header_pvac(r: ProteinRecord, prefix: str) -> str:
     return ">" + ".".join(sanitize_id(b) for b in bits)
 
 
-def header_uniprot(r: ProteinRecord, prefix: str) -> str:
+def header_uniprot(r: ProteinRecord, prefix: str,
+                   species: Species = HUMAN) -> str:
     """UniProt/SwissProt grammar, matching the supplied reference FASTA.
 
         >db|ACCESSION|ENTRY_NAME Description OS=Homo sapiens OX=9606 GN=SYM
@@ -148,8 +153,9 @@ def header_uniprot(r: ProteinRecord, prefix: str) -> str:
             return r.extra["uniprot_header"]
         acc = r.extra.get("accession") or sanitize_id(r.seq_id)
         desc = r.extra.get("description") or f"{r.gene or 'NA'} reference protein"
-        head = (f">sp|{acc}|{sanitize_id(r.gene or 'NA').upper()}_HUMAN "
-                f"{desc} OS=Homo sapiens OX=9606")
+        head = (f">sp|{acc}|"
+                f"{species.entry_name(sanitize_id(r.gene or 'NA').upper())} "
+                f"{desc} {species.os_ox()}")
         if r.gene:
             head += f" GN={r.gene}"
         head += " VT=REFERENCE CSQ=reference"
@@ -162,12 +168,13 @@ def header_uniprot(r: ProteinRecord, prefix: str) -> str:
     # UniProt accession is carried separately in UP=.
     acc = r.extra.get("_serial") or sanitize_id(r.seq_id)
     gene = r.gene or "NA"
-    entry = f"{sanitize_id(gene).upper()}_HUMAN_{r.variant_class}"
+    entry = (f"{species.entry_name(sanitize_id(gene).upper())}"
+             f"_{r.variant_class}")
     desc = r.extra.get("description") or f"{gene} variant protein"
     change = r.protein_change or r.consequence or r.variant_class
     head = (f">vr|{prefix}_{acc}|{entry} {desc} ({change}; "
             f"{VARIANT_TYPE_VOCAB.get(r.variant_class, r.variant_class)})"
-            f" OS=Homo sapiens OX=9606")
+            f" {species.os_ox()}")
     if r.gene:
         head += f" GN={r.gene}"
     head += f" VT={r.variant_class} CSQ={r.consequence or 'NA'}"
@@ -198,7 +205,7 @@ def header_uniprot(r: ProteinRecord, prefix: str) -> str:
     return head
 
 
-HEADER_STYLES: dict[str, Callable[[ProteinRecord, str], str]] = {
+HEADER_STYLES: dict[str, Callable[..., str]] = {
     "descriptive": header_descriptive,
     "peff": header_peff,
     "pvac": header_pvac,
@@ -238,8 +245,13 @@ def write_fasta(records: Sequence[ProteinRecord], path: str | Path,
                 style: str = "descriptive", prefix: str = "HCC1395",
                 width: int = 60, db_name: str = "HCC1395_variant_proteome",
                 description: str = "HCC1395 variant protein database",
-                dedup: bool = True, logger=None) -> dict[str, int]:
-    """Write records to FASTA. Returns per-variant-class counts."""
+                dedup: bool = True, logger=None,
+                species: Species = HUMAN) -> dict[str, int]:
+    """Write records to FASTA. Returns per-variant-class counts.
+
+    `species` defaults to human, so a caller that does not pass one emits
+    exactly the headers it did before this parameter existed.
+    """
     if style not in HEADER_STYLES:
         raise ValueError(f"unknown header style {style!r}; "
                          f"choose from {sorted(HEADER_STYLES)}")
@@ -280,7 +292,7 @@ def write_fasta(records: Sequence[ProteinRecord], path: str | Path,
         if style == "peff":
             fh.write(peff_file_header(db_name, prefix, len(kept), description))
         for r in kept:
-            fh.write(fmt(r, prefix) + "\n")
+            fh.write(fmt(r, prefix, species) + "\n")
             fh.write(wrap(r.sequence, width) + "\n")
 
     if logger:

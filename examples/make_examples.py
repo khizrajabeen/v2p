@@ -54,7 +54,7 @@ ADAR_RECODING = [
 FUSIONS = [
     ("BCR", "ABL1", "chr22:23290413", "chr9:130854064", "SR;LR", 0.99),
     ("EML4", "ALK", "chr2:42295516", "chr2:29223528", "SR;LR", 0.97),
-    ("TMPRSS2", "ERG", "chr21:41508081", "chr21:38445621", "SR", 0.91),
+    ("TMPRSS2", "ERG", "chr21:41508081", "chr21:38403709", "SR", 0.91),
 ]
 
 COMPLEMENT_SWAP = {"A": "G", "G": "A", "C": "T", "T": "C"}

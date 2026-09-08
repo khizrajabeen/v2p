@@ -1,0 +1,13 @@
+# Mouse, GRCm39. Contig lengths are the Ensembl/GENCODE GRCm39 primary
+# assembly values and are what the reference audit asserts against.
+scientific_name: Mus musculus
+common_name: mouse
+taxon_id: 10090
+entry_suffix: MOUSE
+assembly: GRCm39
+mito_contigs: chrM,MT,M,chrMT
+mito_code: 2
+contig_lengths:
+  chr1: 195154279
+  chr2: 181755017
+  chr11: 121973369

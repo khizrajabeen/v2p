@@ -29,6 +29,8 @@ from v2p.build.smallvar import (                         # noqa: E402
     ProteinRecord, build_small_variant_proteins,
 )
 from v2p.build.splicing import build_splicing_proteins   # noqa: E402
+from v2p.build.noncanonical import build_noncanonical_proteins
+from v2p.species import load_species
 from v2p.fasta import (                                  # noqa: E402
     HEADER_STYLES, write_fasta, write_record_table,
 )
@@ -63,6 +65,20 @@ def main() -> int:
                     choices=sorted(HEADER_STYLES))
     ap.add_argument("--transcript-mode", default="representative",
                     choices=["representative", "all"])
+    ap.add_argument("--species", default="human",
+                    help="species name (human, mouse, ...) or a path to a "
+                         "config/species/*.yaml. Sets the entry-name suffix "
+                         "and the OS=/OX= fields in headers.")
+    ap.add_argument("--include-noncanonical", action="store_true",
+                    help="also three-frame translate non-coding "
+                         "transcripts (lncRNA, pseudogene). OFF by "
+                         "default: it multiplies database size and an "
+                         "inflated search space costs sensitivity.")
+    ap.add_argument("--nc-min-aa", type=int, default=30,
+                    help="minimum ORF length in residues (default 30)")
+    ap.add_argument("--nc-any-start", action="store_true",
+                    help="keep ORFs that do not begin at ATG, recording "
+                         "the frame")
     ap.add_argument("--classes", default="",
                     help="comma-separated variant_class filter (default: all)")
     ap.add_argument("--min-peptide", type=int, default=8,
@@ -97,7 +113,10 @@ def main() -> int:
 
     outdir = Path(args.outdir)
     rl = RunLogger("02_build_protein_fasta", args.logdir)
-    rl.add_params(header_style=args.header_style,
+    species = load_species(args.species)
+    rl.add_params(species=species.common_name,
+                  taxon_id=species.taxon_id,
+                  header_style=args.header_style,
                   transcript_mode=args.transcript_mode,
                   min_peptide=args.min_peptide,
                   include_reference=args.include_reference,
@@ -109,7 +128,12 @@ def main() -> int:
     rl.add_input("gtf", args.gtf)
 
     rl.log.info("loading annotation ...")
-    ann = Annotation.from_gtf(args.gtf, coding_only=True, logger=rl.log)
+    # Non-coding transcripts are dropped at load time unless the
+    # three-frame path needs them; keeping them otherwise would slow
+    # every ordinary run for nothing.
+    ann = Annotation.from_gtf(args.gtf,
+                              coding_only=not args.include_noncanonical,
+                              logger=rl.log)
     ann.build_position_index(logger=rl.log)
     rl.log.info("opening genome ...")
     genome = Genome(args.genome)
@@ -309,8 +333,19 @@ def main() -> int:
     tag = f"{args.header_style}.{args.transcript_mode}"
     fasta_path = outdir / "fasta" / f"HCC1395_variant_proteins.{tag}.fasta"
     table_path = outdir / "tables" / f"protein_records.{tag}.tsv"
+    if args.include_noncanonical:
+        rl.log.info('three-frame translating non-coding transcripts ...')
+        nc = build_noncanonical_proteins(
+            ann.tx.values(), genome, min_aa=args.nc_min_aa,
+            require_atg=not args.nc_any_start)
+        rl.log.info('non-canonical ORFs: %d', len(nc))
+        rl.count('noncanonical.orfs', len(nc))
+        for r in nc:
+            rl.count(f'noncanonical.{r.variant_class}')
+        records.extend(nc)
+
     counts = write_fasta(records, fasta_path, style=args.header_style,
-                         logger=rl.log)
+                         logger=rl.log, species=species)
     write_record_table(records, table_path)
     for k, v in counts.items():
         rl.count(f"fasta.{k}", v)

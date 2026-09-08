@@ -281,6 +281,9 @@ def cmd_run(args: argparse.Namespace) -> int:
          "--header-style", args.header_style,
          "--transcript-mode", args.transcript_mode,
          "--include-reference",
+         "--species", args.species,
+         *(["--include-noncanonical"] if args.include_noncanonical else []),
+         "--nc-min-aa", str(args.nc_min_aa),
          "--emit-disposition", str(work / "tables" / "disposition.tsv"),
          "--outdir", str(work)]
     if args.keep_unchanged:
@@ -439,6 +442,17 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--include-noncanonical", action="store_true",
+      help="also three-frame translate non-coding transcripts (lncRNA, "
+           "pseudogene) into NC_* entries. OFF by default: it multiplies "
+           "database size several-fold, and an inflated search space costs "
+           "sensitivity at a fixed FDR.")
+    A("--nc-min-aa", type=int, default=30,
+      help="minimum non-canonical ORF length in residues (default 30)")
+    A("--species", default="human",
+      help="species name (human, mouse, ...) or a path to a "
+           "config/species/*.yaml. Sets the entry-name suffix and the "
+           "OS=/OX= fields in every header. Default human.")
     A("--header-style", default="uniprot",
       choices=["uniprot", "peff", "pvac", "descriptive"])
     A("--keep-unchanged", action="store_true", default=True,

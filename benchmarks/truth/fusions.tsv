@@ -1,0 +1,12 @@
+# v2p benchmark truth set - characterised gene fusions
+# The fusion ARCHITECTURE (which exon of which partner joins which)
+# is published; see the source column. The genomic COORDINATES are
+# derived here from GENCODE v44 exon boundaries rather than quoted,
+# because breakpoint coordinates are reported inconsistently across
+# papers and assemblies. verification_method records the derivation
+# for each row so it can be rechecked by hand.
+# Verified rows: 3 of 3.
+name	gene5p	exon5p	gene3p	exon3p	breakpoint1	breakpoint2	transcript5p	transcript3p	architecture	expected_consequence	assembly	source	source_version	verification	verification_method
+BCR--ABL1	BCR	14	ABL1	2	chr22:23290413	chr9:130854064	ENST00000305877.13	ENST00000318560.6	e14a2 (b3a2)	in_frame_fusion	GRCh38	Melo 1996 Blood 88:2375; PMID 8839828	GENCODE v44	verified	derived from GENCODE v44: 3-prime end of BCR exon 14 of ENST00000305877.13 (+, 23 exons) joined to 5-prime start of ABL1 exon 2 of ENST00000318560.6 (+, 11 exons)
+EML4--ALK	EML4	13	ALK	20	chr2:42295516	chr2:29223528	ENST00000318522.10	ENST00000389048.8	variant 1 (E13;A20)	in_frame_fusion	GRCh38	Soda 2007 Nature 448:561; PMID 17625570	GENCODE v44	verified	derived from GENCODE v44: 3-prime end of EML4 exon 13 of ENST00000318522.10 (+, 23 exons) joined to 5-prime start of ALK exon 20 of ENST00000389048.8 (-, 29 exons)
+TMPRSS2--ERG	TMPRSS2	1	ERG	4	chr21:41508081	chr21:38403709	ENST00000332149.10	ENST00000288319.12	T1/E4	in_frame_fusion	GRCh38	Tomlins 2005 Science 310:644; PMID 16254181	GENCODE v44	verified	derived from GENCODE v44: 3-prime end of TMPRSS2 exon 1 of ENST00000332149.10 (-, 14 exons) joined to 5-prime start of ERG exon 4 of ENST00000288319.12 (-, 10 exons)
