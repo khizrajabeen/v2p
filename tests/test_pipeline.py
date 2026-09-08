@@ -627,6 +627,49 @@ def main() -> int:
         check(f"regression: the audit can read its own {_rel}",
               _got is True, str(_got))
 
+    # --------------- regression: VCF anchor base outside the coding exon
+    # A VCF anchors an indel on the base *before* the change. When that
+    # base sits outside the CDS - one base into the UTR or intron - the
+    # interval [pos, pos+len(ref)-1] failed to map and the variant was
+    # filed "not_in_coding_exon", a plausible disposition for a variant
+    # that does delete coding sequence. FBXW7 chr4:152332595 CCCTCT>C in
+    # the benchmark was exactly this.
+    from v2p.build.smallvar import _is_left_anchored as _anch
+    check("regression: a deletion is recognised as left-anchored",
+          _anch("CCCTCT", "C"))
+    check("regression: an insertion is recognised as left-anchored",
+          _anch("A", "ATTT"))
+    check("regression: a substitution is not left-anchored",
+          not _anch("A", "G") and not _anch("AC", "GT"))
+    check("regression: an indel with no shared anchor base is not trimmed",
+          not _anch("CCC", "T"))
+
+    _cds1 = gpos_plus(meta, "GPLUS", 1, 1)      # first base of the CDS
+    _anchor = _cds1 - 1                          # last base of the 5' UTR
+    _ref = gen.fetch("chrT1", _anchor, _anchor + 3)
+    _recs = build_small_variant_proteins(
+        "chrT1", _anchor, _ref, _ref[0], ann, gen,
+        variant_class="INDEL", genes="GPLUS")
+    check("regression: an indel anchored outside the CDS still builds a "
+          "protein", bool(_recs),
+          f"{len(_recs)} record(s)")
+    # The safety property the rescue depends on: trimming the shared
+    # anchor base leaves the protein unchanged, because the same base is
+    # removed from ref and from alt. If that were not so, the fallback
+    # could alter a variant that already worked.
+    _in = gpos_plus(meta, "GPLUS", 4, 1)         # well inside the CDS
+    _r2 = gen.fetch("chrT1", _in - 1, _in + 2)   # anchored 3-base deletion
+    _full = build_small_variant_proteins(
+        "chrT1", _in - 1, _r2, _r2[0], ann, gen,
+        variant_class="INDEL", genes="GPLUS")
+    _trim = build_small_variant_proteins(
+        "chrT1", _in, _r2[1:], "", ann, gen,
+        variant_class="INDEL", genes="GPLUS")
+    check("regression: trimming the anchor does not change the protein",
+          bool(_full) and bool(_trim)
+          and _full[0].sequence == _trim[0].sequence,
+          f"{len(_full)}/{len(_trim)} records")
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILURES:")

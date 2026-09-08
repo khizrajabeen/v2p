@@ -55,15 +55,15 @@ Full guide: **[docs/USAGE.md](docs/USAGE.md)**.
 
 | check | result |
 |---|---|
-| ClinVar benchmark, 263 asserted rows | **98.9% recall, 99.2% precision** |
+| ClinVar benchmark, 263 asserted rows | **99.2% recall, 99.2% precision** |
 | Ensembl VEP consequence agreement | **334/334 (100%)** on shared transcripts |
 | A-to-I editing positive controls | **5/5** |
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **tied**, 259/260 each |
-| tests | **272**, offline, seconds |
+| tests | **278**, offline, seconds |
 
 ```bash
-make test                                   # 272 assertions, no reference needed
+make test                                   # 278 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 v2p audit --ref ref/                        # check the reference interface
@@ -90,10 +90,9 @@ longest CDS → longest transcript → id.
 - **Human and mouse only.** Other species need a `config/species/*.yaml`.
 - **No ProteoDisco comparison.** It needs R, Bioconductor, BSgenome and a
   TxDb; not run. `benchmarks/compare_tools.md` has the procedure.
-- **3 benchmark disagreements remain**, listed individually in
-  `benchmarks/results/benchmark.md`: two FGFR3 rows where isoform
-  numbering differs, and one FBXW7 five-base deletion that produces no
-  protein.
+- **2 benchmark disagreements remain**, both the same FGFR3 variant
+  (duplicated in the truth set) where the isoform numbering differs.
+  Listed in `benchmarks/results/benchmark.md`.
 - **73 of 336 ClinVar truth rows carry no assertion criteria** and are
   excluded from the headline figure. `--min-review-status any` includes
   them.

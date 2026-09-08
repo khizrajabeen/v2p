@@ -79,6 +79,16 @@ def _cds_offset(t: Transcript) -> int | None:
     return _TX_OFF_CACHE[key]
 
 
+def _is_left_anchored(ref: str, alt: str) -> bool:
+    """A VCF indel whose first base is the unchanged anchor.
+
+    `CCCTCT>C` at P leaves P alone and deletes P+1..P+5; `A>ATTT` inserts
+    after P. Substitutions are never anchored, so they are excluded.
+    """
+    return (len(ref) != len(alt) and bool(ref) and bool(alt)
+            and ref[0] == alt[0])
+
+
 def _tx_interval(t: Transcript, gpos: int, glen: int) -> tuple[int, int] | None:
     """Transcript offsets covered by genomic [gpos, gpos+glen-1].
 
@@ -177,7 +187,27 @@ def build_small_variant_proteins(
         if not t.is_coding:
             continue
 
+        # Loop-local: `ref`/`alt` must survive unchanged into the next
+        # transcript, so the anchor-trimmed forms get their own names.
+        e_ref, e_alt = ref, alt
+        trimmed = False
         iv = _tx_interval(t, pos, len(ref))
+        if iv is None and _is_left_anchored(ref, alt):
+            # VCF anchors an indel on the base *before* the change, and
+            # that base is often just outside the exon. FBXW7
+            # chr4:152332595 CCCTCT>C deletes five coding bases, but its
+            # anchor sits outside the CDS, so mapping [pos, pos+5] failed
+            # and the variant was filed as "not_in_coding_exon" - a
+            # plausible-looking disposition for a variant that does hit
+            # the CDS.
+            #
+            # Trimming the shared leading base is a no-op on the resulting
+            # sequence, since the same base leaves both ref and alt. So
+            # this can only rescue a variant that currently fails; it
+            # cannot change one that already works.
+            e_ref, e_alt = ref[1:], alt[1:]
+            iv = _tx_interval(t, pos + 1, len(e_ref)) if e_ref else None
+            trimmed = iv is not None
         if iv is None:
             continue                      # intronic, or spans a splice site
         tx_start, tx_len = iv
@@ -188,8 +218,10 @@ def build_small_variant_proteins(
             continue
 
         obs_ref = tx_seq[tx_start:tx_start + tx_len]
-        exp_ref = ref if t.strand == "+" else revcomp(ref)
+        exp_ref = e_ref if t.strand == "+" else revcomp(e_ref)
         note: list[str] = []
+        if trimmed:
+            note.append("vcf_anchor_outside_cds")
         if obs_ref != exp_ref:
             note.append(f"REF_MISMATCH(expected={exp_ref},found={obs_ref})")
             if logger:
@@ -197,7 +229,7 @@ def build_small_variant_proteins(
                     "REF mismatch %s:%d %s>%s on %s: transcript has %s",
                     chrom, pos, ref, alt, t.tx_id, obs_ref)
 
-        alt_tx_allele = alt if t.strand == "+" else revcomp(alt)
+        alt_tx_allele = e_alt if t.strand == "+" else revcomp(e_alt)
         mut_seq = tx_seq[:tx_start] + alt_tx_allele + tx_seq[tx_start + tx_len:]
 
         # a 5'UTR indel shifts where the CDS begins
