@@ -1,10 +1,50 @@
 # Cross-tool comparison
 
-**Status: specified, not run.** Everything below is procedure. No
-competitor has been installed or executed, so this document contains no
-competitor results, and v2p's own figures imply nothing about the
-competition. Filling the results table in is the remaining work;
-publishing it with invented numbers would be worse than leaving it empty.
+**Status: pypgatk installed and run; it produced no output, for a reason
+worth recording. ProteoDisco not attempted.** No competitor number has
+been measured, so v2p's own figures imply nothing about the competition.
+Publishing this table with invented numbers would be worse than leaving it
+empty.
+
+## What happened when pypgatk was actually run
+
+pypgatk **0.0.24**, installed from PyPI, given the same truth VCF and
+GENCODE v44:
+
+```bash
+pypgatk_cli.py vcf-to-proteindb \
+    --input_fasta ref/gencode.v44.pc_transcripts.fa.gz \
+    --vcf bench_work/inputs/truth_variants.vcf \
+    --gene_annotations_gtf ref/gencode.v44.annotation.gtf.gz \
+    --output_proteindb pypgatk.fasta --ignore_filters
+```
+
+It spent about twenty minutes building a gffutils SQLite index of the GTF,
+then **exited 0 and wrote no output file at all**.
+
+The cause is not a bug, it is a prerequisite: `vcf-to-proteindb` reads the
+transcript id and the consequence from a **VEP annotation field in the VCF
+INFO column**. The truth VCF is sites-only — its INFO is `GENE=<symbol>`
+and nothing else — so no variant carried an annotation pypgatk could use,
+and it had nothing to translate.
+
+Two things follow, and both belong in any comparison:
+
+1. **The tools take different inputs.** pypgatk requires a VEP-annotated
+   VCF. v2p takes a sites-only VCF and does its own transcript resolution
+   and consequence calling. That is a real difference in what a user has
+   to assemble before either tool will run, and it is not visible from
+   either tool's feature list.
+2. **pypgatk fails silently here.** Exit code 0, no file, no warning that
+   the annotation field was missing. A pipeline that checked only the exit
+   status would record a successful run that produced nothing. This is
+   exactly the failure mode v2p's release invariants exist to catch, and
+   it is worth stating plainly rather than treating as an implementation
+   detail.
+
+To finish this comparison, the truth VCF must be VEP-annotated first —
+VEP plus its GRCh38 cache is roughly 25 GB, which is why it has not been
+done here. Once annotated, rerun the command above and fill in the table.
 
 ## Why the comparison is narrow
 
@@ -91,8 +131,9 @@ release each was given, because neither can be pointed at GENCODE v44.
 | tool | version | small-variant recall | precision | notes |
 |---|---|---|---|---|
 | v2p | 1.0.0 | 97.3% | 98.1% | 263 asserted rows, `09_benchmark.py` |
-| ProteoDisco | — | not run | not run | |
-| pypgatk | — | not run | not run | |
+| pypgatk | 0.0.24 | not measured | not measured | ran, exited 0, produced no output: needs a VEP-annotated VCF |
+| ProteoDisco | — | not attempted | not attempted | needs R, Bioconductor, BSgenome + TxDb |
 
 Only the v2p row is measured. Fill the others in from real runs, record the
-exact versions, and report whatever comes out.
+exact versions, and report whatever comes out — including a result that
+favours a competitor.
