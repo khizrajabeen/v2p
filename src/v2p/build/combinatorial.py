@@ -1,10 +1,9 @@
 """Combinatorial proteoforms: co-occurring variants applied together.
 
-Every tool in this space, including this one until now, translates one
-variant at a time. A transcript carrying three somatic SNVs yields three
-proteins, each with one substitution and the other two reverted to
-reference. No cell contains those proteins. The cell contains the protein
-carrying all three.
+This pipeline, until now, translated one variant at a time. A transcript
+carrying three somatic SNVs yielded three proteins, each with one
+substitution and the other two reverted to reference. No cell contains
+those proteins. The cell contains the protein carrying all three.
 
 Why it matters, and how much
 ----------------------------
@@ -18,13 +17,20 @@ acid substitutions can share a tryptic peptide with another
 substitution**. Those peptides are unsearchable in a single-variant
 database.
 
-ProHap covers common haplotypes drawn from reference panels (1000
-Genomes, HRC, HPRC). That leaves the sample-specific case open: somatic
-variants are in no panel, and RNA editing, fusions and splicing are not
-genotypes at all. v2p is the only tool reading all four into one
-coordinate space, so it is the only one that can combine *across* them -
-a somatic SNV plus an ADAR edit on the same transcript is a proteoform
-with neither a purely genomic nor a purely transcriptomic basis.
+What is and is not new here
+---------------------------
+Combining is not new, and this module did not invent it: ProHap's whole
+design is combination, from *phased* genotypes, and its companion ProVar
+takes sample-level VCFs but "considers each allele independently". This
+module works in ProVar's scope - one sample, calls that are often
+unphased - and combines there.
+
+The part that is genuinely unavailable elsewhere is combination *across
+evidence types*. A somatic SNV co-occurring with an A-to-I edit on one
+transcript cannot be represented by any haplotype panel: RNA editing is
+not in the genome and never appears in a VCF of genotypes. That is a
+limit of the input a genotype-based tool is given, not an oversight in
+its design.
 
 Every entry must earn its place
 -------------------------------

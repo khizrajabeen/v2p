@@ -32,21 +32,19 @@ alternative splicing into one FASTA with a shared header vocabulary.
 - **Byte-identical reproducibility** — two runs from one config produce
   the same release, verified over the whole tree.
 - **Combinatorial proteoforms** — when two or more variants land on one
-  transcript, emit the protein carrying *all* of them. Every other tool
-  translates one variant at a time, so a tryptic peptide spanning two
-  variants exists in no entry of the database and cannot be identified at
-  any FDR — [ProHap](https://doi.org/10.1038/s41592-024-02506-0) measured
-  this at 12.4% of substitutions for common haplotypes alone. Two variants
-  can even share a codon: in HCC1395, FKTN carries `p.[D225K]`, a lysine
-  no single-variant entry produces, which also creates a tryptic cleavage
-  site. Each entry must contribute a peptide that no single-variant entry
-  has, or it is dropped rather than inflating the database. Phase is
-  honoured where the caller reports `GT`/`PS` — variants on opposite
-  haplotypes are never combined — and entries are marked `unphased` where
-  it is absent. Because v2p is the only tool reading DNA variants, RNA
-  editing, fusions and splicing into one coordinate space, it is also the
-  only one that can combine *across* evidence types. Opt-in with
-  `--combine-variants`.
+  transcript, emit the protein carrying *all* of them. A tryptic peptide
+  spanning two variants is in neither single-variant entry nor the
+  reference, so a database built one variant at a time cannot identify it
+  at any FDR; [ProHap](https://doi.org/10.1038/s41592-024-02506-0)
+  measured this at 12.4% of substitutions for common germline haplotypes.
+  Two variants can even share a codon: in HCC1395, FKTN carries
+  `p.[D225K]`, a lysine no single-variant entry produces, which also
+  creates a tryptic cleavage site. Each entry must contribute a peptide no
+  single-variant entry has, or it is dropped rather than inflating the
+  database. Phase is honoured where the caller reports `GT`/`PS` —
+  variants on opposite haplotypes are never combined — and entries are
+  marked `unphased` where it is absent. Opt-in with `--combine-variants`;
+  [how v2p compares](#how-v2p-compares) says what is and is not new here.
 - **Non-canonical ORFs** — three-frame translation of lncRNAs,
   pseudogenes, and 5′/3′ UTRs of coding transcripts (uORFs and dORFs),
   with the reading frame recorded per entry and a configurable length
@@ -60,6 +58,33 @@ alternative splicing into one FASTA with a shared header vocabulary.
   YAML file.
 - **Search-engine compatible** — four header conventions (UniProt, PEFF,
   pVAC, descriptive) and three decoy strategies.
+
+## How v2p compares
+
+Combining co-occurring variants is not new, and v2p did not invent it.
+It is the central purpose of
+[ProHap](https://doi.org/10.1038/s41592-024-02506-0) (*Nature Methods*
+2024), which builds protein haplotypes "using observed combinations of
+alleles in each transcript" from **phased genotype data**. Its companion
+**ProVar** takes sample-level VCFs and "considers each allele
+independently" — one sequence per variant, no combination. v2p works in
+ProVar's scope, one sample, and combines there.
+
+| | ProHap | ProVar | v2p |
+|---|---|---|---|
+| scope | phased genotype panels | one sample | one sample |
+| combines co-occurring variants | **yes**, phased germline | no | yes |
+| RNA editing | no | no | **yes** |
+| fusions | no | no | **yes** |
+| splicing | transcript-level | no | **yes** |
+| install | Snakemake + Conda, ~1 TB for full 1000G | Snakemake + Conda | pip, one dependency |
+| output audit trail | peptide annotator | — | disposition + provenance graph |
+
+**The one claim that is v2p's alone:** it combines co-occurring variants
+*across evidence types*. A somatic SNV co-occurring with an A-to-I edit on
+one transcript cannot be represented by any haplotype panel — RNA editing
+is not in the genome and never appears in a VCF of genotypes. ProHap
+cannot see that proteoform in principle, not by omission.
 
 ## Installation
 
