@@ -109,6 +109,15 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
             comment="minimum non-canonical ORF length in residues"),
         Key("noncanonical_any_start", "nc_any_start", "bool", False,
             comment="keep ORFs that do not begin at ATG"),
+        # Combining changes what is in the database, so a config that
+        # omitted these would reproduce a different release from the run
+        # that wrote it.
+        Key("combine_variants", "combine_variants", "bool", False,
+            comment="emit proteins carrying all co-occurring variants"),
+        Key("combine_max", "combine_max", "int", 8,
+            comment="most variants combined on one transcript"),
+        Key("allow_unphased", "allow_unphased", "bool", True,
+            comment="combine variants the caller did not phase"),
     ),
     "output": (
         Key("dir", "outdir", "path", "v2p_output"),

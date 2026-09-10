@@ -85,6 +85,12 @@ def main() -> int:
                     help="most variants combined on one transcript "
                          "(default 8); above this is likely an "
                          "alignment artefact")
+    ap.add_argument("--no-allow-unphased", dest="allow_unphased",
+                    action="store_false",
+                    help="refuse to combine variants the caller did not "
+                         "phase. Default is to allow them, because "
+                         "sites-only and unphased VCFs are the common "
+                         "case, but each entry records PHASE= either way")
     ap.add_argument("--combine-missed-cleavages", type=int, default=2,
                     help="missed cleavages used to decide whether a "
                          "combination yields a peptide that no "
@@ -366,6 +372,7 @@ def main() -> int:
             transcript_mode=args.transcript_mode,
             max_variants=args.combine_max,
             missed_cleavages=args.combine_missed_cleavages,
+            allow_unphased=args.allow_unphased,
             logger=rl.log)
         n_cross = sum(1 for r in combos if r.extra.get('cross_evidence'))
         n_phased = sum(1 for r in combos if r.extra.get('phased'))

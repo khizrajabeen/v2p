@@ -285,6 +285,8 @@ def cmd_run(args: argparse.Namespace) -> int:
          *(["--include-noncanonical"] if args.include_noncanonical else []),
          "--nc-min-aa", str(args.nc_min_aa),
          *(["--combine-variants"] if args.combine_variants else []),
+         *([] if args.allow_unphased else ["--no-allow-unphased"]),
+         "--combine-max", str(args.combine_max),
          "--emit-disposition", str(work / "tables" / "disposition.tsv"),
          "--outdir", str(work)]
     if args.keep_unchanged:
@@ -452,6 +454,16 @@ def _add_run_arguments(r: argparse.ArgumentParser,
            "is honoured where the caller reports GT/PS, and variants on "
            "opposite haplotypes are never combined; without phase the entry "
            "is a hypothesis, marked unphased. OFF by default.")
+    A("--combine-max", type=int, default=8,
+      help="most variants combined on one transcript (default 8). Above "
+           "this a transcript is far likelier to be an alignment artefact "
+           "than a real proteoform.")
+    A("--no-allow-unphased", dest="allow_unphased", action="store_false",
+      help="refuse to combine variants the caller did not phase. Default "
+           "is to allow them, since sites-only and unphased VCFs are the "
+           "common case, but every entry records PHASE=phased or "
+           "PHASE=unphased either way, so hypotheses can be filtered from "
+           "the database without rebuilding it.")
     A("--include-noncanonical", action="store_true",
       help="also three-frame translate non-coding transcripts (lncRNA, "
            "pseudogene) into NC_* entries. OFF by default: it multiplies "

@@ -19,7 +19,9 @@ test:
 
 from __future__ import annotations
 
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +36,8 @@ from v2p.build.combinatorial import (                       # noqa: E402
     phase_groups,
 )
 from v2p.build.smallvar import build_small_variant_proteins  # noqa: E402
-from v2p.parse.inputs import _phase                         # noqa: E402
+from v2p.fasta import write_fasta                           # noqa: E402
+from v2p.parse.inputs import _phase, parse_vcf              # noqa: E402
 from v2p.seqops import table_for_contig, translate_orf      # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures"
@@ -139,9 +142,13 @@ def test_phase_grouping() -> None:
     check("a homozygous variant joins both haplotypes",
           len(hom) == 1 and hom[0][0] == "1|1", str([g[0] for g in hom]))
 
+    # Two variants each phased, but in different blocks: each block is
+    # internally phased, their relative phase is not known. That is a
+    # hypothesis, not a refusal.
     blocks = phase_groups([v(10, "1", [0]), v(20, "2", [0])])
-    check("different phase sets are not one haplotype", blocks == [],
-          str(blocks))
+    check("different phase sets are an unphased hypothesis, not a haplotype",
+          len(blocks) == 1 and blocks[0][0] == "unphased"
+          and not blocks[0][1], str([(g[0], g[1]) for g in blocks]))
 
     mixed = phase_groups([v(10, "1", [0]), v(20, "1", [0]), v(30)])
     labels = sorted(g[0] for g in mixed)
@@ -172,6 +179,101 @@ def test_vcf_phase_parsing() -> None:
           == ("", frozenset()))
 
 
+VCF_HEAD = ("##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1\n")
+
+
+def write_vcf(path: Path, rows) -> Path:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(VCF_HEAD)
+        for chrom, pos, ref, alt, fmt, sample in rows:
+            fh.write(f"{chrom}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\t.\t"
+                     f"{fmt}\t{sample}\n")
+    return path
+
+
+def from_vcf(path: Path) -> list[CombinableVariant]:
+    """Parse as the pipeline does, including the phase fields."""
+    out = []
+    for row in parse_vcf(path):
+        p = row["payload"]
+        out.append(CombinableVariant(
+            p["chrom"], p["pos"], p["ref"], p["alt"], row["variant_class"],
+            row["source"], row.get("confidence", ""),
+            p.get("phase_set", ""), frozenset(p.get("haplotypes") or ())))
+    return out
+
+
+def test_phased_vcf_to_fasta(meta, ann, gen) -> None:
+    """The three cases, from a real VCF through to a written FASTA.
+
+    The opposite-haplotype case is asserted on the file's contents: no
+    counter, no return value, the protein must simply not be there.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="v2p_phase_"))
+    p3 = gpos_plus(meta, "GPLUS", 3, 1)
+    p9 = gpos_plus(meta, "GPLUS", 9, 1)
+    r3 = gen.fetch("chrT1", p3, p3)
+    r9 = gen.fetch("chrT1", p9, p9)
+    a3, a9 = SWAP[r3], SWAP[r9]
+
+    def build(rows, name, **kw):
+        vs = from_vcf(write_vcf(tmp / f"{name}.vcf", rows))
+        recs = build_combinatorial_proteins(vs, ann, gen,
+                                            transcript_mode="all", **kw)
+        fa = tmp / f"{name}.fasta"
+        write_fasta(recs, fa, style="uniprot")
+        return recs, fa.read_text(encoding="utf-8")
+
+    # 1. Same haplotype, same PS block -> one molecule carries both.
+    same, same_fa = build(
+        [("chrT1", p3, r3, a3, "GT:PS", "0|1:100"),
+         ("chrT1", p9, r9, a9, "GT:PS", "0|1:100")], "same")
+    check("a same-haplotype pair from a phased VCF combines", bool(same),
+          f"{len(same)} record(s)")
+    check("its phase is recorded in the FASTA header",
+          "PHASE=phased" in same_fa,
+          next((ln[-40:] for ln in same_fa.splitlines()
+                if ln.startswith(">")), ""))
+    combined_seq = same[0].sequence if same else ""
+
+    # 2. Opposite haplotypes, same PS block -> no molecule carries both.
+    opp, opp_fa = build(
+        [("chrT1", p3, r3, a3, "GT:PS", "0|1:100"),
+         ("chrT1", p9, r9, a9, "GT:PS", "1|0:100")], "opp")
+    body = "".join(ln for ln in opp_fa.splitlines()
+                   if not ln.startswith(">"))
+    check("the opposite-haplotype protein is absent from the FASTA",
+          combined_seq != "" and combined_seq not in body,
+          f"fasta {len(opp_fa)} bytes, {len(opp)} record(s)")
+
+    # 3. Different PS blocks -> relative phase unknown: a hypothesis.
+    diff, diff_fa = build(
+        [("chrT1", p3, r3, a3, "GT:PS", "0|1:100"),
+         ("chrT1", p9, r9, a9, "GT:PS", "0|1:200")], "diff")
+    check("variants in different PS blocks combine as a hypothesis",
+          bool(diff) and "PHASE=unphased" in diff_fa,
+          str(diff[0].notes) if diff else "none")
+
+    diff_off, diff_off_fa = build(
+        [("chrT1", p3, r3, a3, "GT:PS", "0|1:100"),
+         ("chrT1", p9, r9, a9, "GT:PS", "0|1:200")], "diff_off",
+        allow_unphased=False)
+    check("--no-allow-unphased removes it from the FASTA",
+          diff_off == [] and ">" not in diff_off_fa,
+          f"{len(diff_off)} record(s)")
+
+    # An unphased pair is still admitted by default: that is the common
+    # case, and HCC1395's own VCF is sites-only.
+    plain, _ = build([("chrT1", p3, r3, a3, "GT", "0/1"),
+                      ("chrT1", p9, r9, a9, "GT", "0/1")], "plain")
+    check("a slashed GT still combines by default, marked unphased",
+          bool(plain) and plain[0].extra["phase"] == "unphased",
+          str(plain[0].extra["phase"]) if plain else "none")
+
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     test_peptide_necessity()
     test_allele_notation()
@@ -181,6 +283,7 @@ def main() -> int:
     meta = build()
     ann = Annotation.from_gtf(FIX / "mini.gtf")
     gen = Genome(FIX / "mini.fa")
+    test_phased_vcf_to_fasta(meta, ann, gen)
 
     # Two substitutions on one transcript, several codons apart.
     p3 = gpos_plus(meta, "GPLUS", 3, 1)

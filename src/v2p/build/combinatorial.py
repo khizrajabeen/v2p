@@ -152,23 +152,37 @@ def phase_groups(variants) -> list[tuple[str, bool, list]]:
     """Split one transcript's variants into sets that can co-exist.
 
     Returns (label, phased, members) tuples, keeping only those with two
-    or more members. A phased group is a fact about one haplotype. The
-    unphased group is a hypothesis, and is formed only when at least one
-    variant lacks phase: if every variant is phased, combining across
-    haplotypes would assert a molecule the caller has ruled out.
+    or more members. A phased group is a fact about one haplotype, and
+    each is emitted separately rather than merged, because two haplotypes
+    are two molecules.
+
+    An unphased group is a hypothesis, and is formed only when the
+    caller has not already settled the question:
+
+    - some variant has no GT, or no PS -> nothing is known about how it
+      sits relative to the others
+    - the variants span more than one PS block -> each block is phased
+      within itself, but their relative phase is unknown
+
+    It is deliberately *not* formed when every variant sits in one PS
+    block, because there the caller has said which haplotype each is on.
+    Two variants it placed on opposite haplotypes are not uncertain:
+    no molecule carries both, and combining them would invent one.
     """
     groups: list[tuple[str, bool, list]] = []
     by_hap: dict[tuple[str, int], list] = {}
+    blocks: set[str] = set()
     any_unphased = False
     for v in variants:
         if v.is_phased:
+            blocks.add(v.phase_set)
             for h in sorted(v.haplotypes):
                 by_hap.setdefault((v.phase_set, h), []).append(v)
         else:
             any_unphased = True
     for (ps, h), members in sorted(by_hap.items()):
         groups.append((f"{ps}|{h}", True, members))
-    if any_unphased or not by_hap:
+    if any_unphased or len(blocks) > 1 or not by_hap:
         groups.append(("unphased", False, list(variants)))
     return [g for g in groups if len(g[2]) > 1]
 
@@ -271,6 +285,7 @@ def build_combinatorial_proteins(
     max_variants: int = 8,
     missed_cleavages: int = 2,
     require_new_peptide: bool = True,
+    allow_unphased: bool = True,
     logger=None,
 ) -> list[ProteinRecord]:
     """One protein per haplotype carrying two or more variants.
@@ -283,11 +298,17 @@ def build_combinatorial_proteins(
     `require_new_peptide` drops any combination whose every tryptic
     peptide already exists in a single-variant entry or the reference.
     Turn it off only to inspect what is being dropped.
+
+    `allow_unphased` admits combinations the caller did not phase. It is
+    on by default because sites-only and unphased VCFs are the common
+    case - HCC1395's truth set has no sample column at all - but every
+    entry records which it is, so the hypotheses can be filtered out
+    later without rebuilding the database.
     """
     out: list[ProteinRecord] = []
     groups = group_by_transcript(variants, ann, transcript_mode)
     serial = 0
-    n_no_peptide = n_overlap = n_capped = 0
+    n_no_peptide = n_overlap = n_capped = n_unphased_skipped = 0
 
     for tx_id in sorted(groups):
         t, tx_vars = groups[tx_id]
@@ -301,6 +322,9 @@ def build_combinatorial_proteins(
         seen_seq: set[str] = set()
 
         for label, phased, vs in phase_groups(tx_vars):
+            if not phased and not allow_unphased:
+                n_unphased_skipped += 1
+                continue
             if len(vs) > max_variants:
                 n_capped += 1
                 if logger:
@@ -366,6 +390,7 @@ def build_combinatorial_proteins(
                        "classes": classes,
                        "cross_evidence": len(classes) > 1,
                        "phased": phased,
+                       "phase": "phased" if phased else "unphased",
                        "phase_set": label if phased else "",
                        "n_cooccurring_peptides": len(new_peps),
                        "cooccurring_peptides": sorted(new_peps)[:20],
@@ -376,8 +401,10 @@ def build_combinatorial_proteins(
                            f"{'phased' if phased else 'unphased'})")},
             ))
 
-    if logger and (n_no_peptide or n_overlap or n_capped):
+    if logger and (n_no_peptide or n_overlap or n_capped
+                   or n_unphased_skipped):
         logger.info("combinatorial: dropped %d contributing no new peptide, "
-                    "%d overlapping, %d over the variant cap",
-                    n_no_peptide, n_overlap, n_capped)
+                    "%d overlapping, %d over the variant cap, %d unphased "
+                    "(--allow-unphased is off)",
+                    n_no_peptide, n_overlap, n_capped, n_unphased_skipped)
     return out

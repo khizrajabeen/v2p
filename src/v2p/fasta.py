@@ -199,6 +199,11 @@ def header_uniprot(r: ProteinRecord, prefix: str,
         head += f" QC={r.extra['uniprot_check']}"
     if r.extra.get("nmd") and r.extra["nmd"] != "not_applicable":
         head += f" NMD={r.extra['nmd']}"
+    if r.extra.get("phase"):
+        # Only combinatorial entries carry this: whether the caller put
+        # these variants on one haplotype, or the combination is a
+        # hypothesis a search should be able to filter out.
+        head += f" PHASE={r.extra['phase']}"
     if r.extra.get("novel_peptides") is not None:
         head += f" NOVELPEP={r.extra['novel_peptides']}"
     if r.notes:

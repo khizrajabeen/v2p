@@ -184,6 +184,8 @@ Detection can be bypassed per evidence type:
 | `--transcript-mode all\|representative` | every transcript, or one per gene |
 | `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |
 | `--combine-variants` | emit proteins carrying all co-occurring variants on a haplotype |
+| `--combine-max <n>` | most variants combined on one transcript, default 8 |
+| `--no-allow-unphased` | keep only combinations the caller actually phased |
 | `--include-noncanonical` | three-frame translate non-coding transcripts |
 | `--split-by-type` / `--no-split` | per-variant-type FASTA files |
 
@@ -245,10 +247,10 @@ to state a recovery rate honestly.
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **260/260** against 259/260 |
 | combinatorial entries on HCC1395 | **9 kept**, 40 dropped as adding no peptide |
-| tests | **330**, offline, seconds |
+| tests | **336**, offline, seconds |
 
 ```bash
-make test                                   # 330 assertions, no reference needed
+make test                                   # 336 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 ```
