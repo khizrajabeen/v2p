@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from v2p.annotation import Annotation, Genome            # noqa: E402
 from v2p.build.fusion import build_fusion_proteins       # noqa: E402
 from v2p.build.smallvar import (                         # noqa: E402
-    ProteinRecord, build_small_variant_proteins,
+    ProteinRecord, _tx_interval, build_small_variant_proteins,
 )
 from v2p.build.splicing import build_splicing_proteins   # noqa: E402
 from v2p.build.combinatorial import (
@@ -319,10 +319,32 @@ def main() -> int:
                 outcome = "no_coding_transcript_at_locus"
                 detail = "intergenic, or the gene has no coding transcript"
             else:
-                outcome = "not_in_coding_exon"
-                detail = (f"{len(near)} coding transcript(s) span this "
-                          f"position but the variant is intronic, UTR, or "
-                          f"crosses a splice junction")
+                # A deletion can begin inside a coding exon and run off
+                # the end of it. Filing that as "not in a coding exon" is
+                # wrong twice over: it is in one, and the reason it was
+                # skipped - that it removes a splice site, so the spliced
+                # product is no longer predictable - is the interesting
+                # part. ProVar translates the exonic portion of these and
+                # flags the splice effect in a column; v2p declines,
+                # because trimming the deletion to the exon asserts a
+                # splicing outcome nobody has observed. Either way the
+                # user is entitled to know which case this is.
+                span = len(p.get("ref") or "")
+                partial = any(
+                    _tx_interval(t, p["pos"], 1) is not None
+                    and _tx_interval(t, p["pos"], span) is None
+                    for t in near) if span > 1 else False
+                if partial:
+                    outcome = "crosses_splice_junction"
+                    detail = (f"the {span} bp reference allele starts in a "
+                              f"coding exon and extends past its boundary, "
+                              f"so it removes a splice site; the spliced "
+                              f"product is not predictable from the call "
+                              f"alone and is not guessed at")
+                else:
+                    outcome = "not_in_coding_exon"
+                    detail = (f"{len(near)} coding transcript(s) span this "
+                              f"position but the variant is intronic or UTR")
         else:
             outcome, detail = "no_protein", "see the log for warnings"
 

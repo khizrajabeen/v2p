@@ -206,6 +206,9 @@ Detection can be bypassed per evidence type:
 |---|---|
 | `scripts/09_benchmark.py` | score against the truth sets, per category |
 | `scripts/10_vep_annotate.py` | annotate a VCF via Ensembl VEP REST (no local cache) |
+| `benchmarks/run_provar.sh` | run ProVar (ProHap's companion) on the same VCF |
+| `benchmarks/compare_provar.py` | score v2p against a ProVar database |
+| `benchmarks/cooccurrence_stat.py` | how often two substitutions share a peptide |
 | `benchmarks/run_proteodisco.R` | run ProteoDisco on the same reference |
 
 ## Supported inputs
@@ -249,10 +252,13 @@ to state a recovery rate honestly.
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **260/260** against 259/260 |
 | combinatorial entries on HCC1395 | **9 kept**, 40 dropped as adding no peptide |
-| tests | **344**, offline, seconds |
+| vs ProVar, variants represented | **2,865** against 911 |
+| vs ProVar, entries carrying >1 variant | **7** against 0 |
+| substitutions sharing a tryptic peptide | **2.9%** here; ProHap measured 12.4% in germline haplotypes |
+| tests | **346**, offline, seconds |
 
 ```bash
-make test                                   # 344 assertions, no reference needed
+make test                                   # 346 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 ```

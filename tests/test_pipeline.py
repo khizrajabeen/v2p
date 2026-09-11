@@ -17,7 +17,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 from make_fixture import build                             # noqa: E402
 from v2p.annotation import Annotation, Genome              # noqa: E402
 from v2p.build.fusion import build_fusion_proteins         # noqa: E402
-from v2p.build.smallvar import build_small_variant_proteins  # noqa: E402
+from v2p.build.smallvar import (                           # noqa: E402
+    _tx_interval, build_small_variant_proteins,
+)
 from v2p.build.splicing import (                           # noqa: E402
     event_junctions, transcript_junctions,
 )
@@ -70,6 +72,24 @@ def main() -> int:
     meta = build()
     ann = Annotation.from_gtf(FIX / "mini.gtf")
     gen = Genome(FIX / "mini.fa")
+
+    # ------------------------------------------- regression: ProVar bench
+    # The ProVar comparison found 7 long deletions v2p produced nothing
+    # for, all filed as "not_in_coding_exon". They *are* in coding exons:
+    # each starts inside one and runs past its boundary, removing a
+    # splice site. v2p still declines to translate them - trimming the
+    # deletion to the exon would assert a splicing outcome nobody has
+    # observed - but the two cases must be distinguishable, because a
+    # splice-site deletion is a finding and an intronic variant is not.
+    _tx = next(t for t in ann.tx.values() if t.is_coding and len(t.exons) > 1)
+    _first_s, _first_e = sorted(_tx.exons)[0]
+    check("a short deletion inside one exon stays inside it",
+          _tx_interval(_tx, _first_s, 3) is not None)
+    check("a deletion running past an exon boundary is partial, "
+          "not intronic",
+          _tx_interval(_tx, _first_e, 1) is not None
+          and _tx_interval(_tx, _first_e, 40) is None,
+          f"exon {_first_s}-{_first_e}")
 
     # ---------------------------------------------------------------- unit
     check("revcomp", revcomp("ACGTN") == "NACGT")
