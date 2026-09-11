@@ -1,17 +1,3 @@
-# Output FASTA format specification
-
-> **Open item.** Zhiyin's email refers to a target FASTA format
-> specification "attached for reference", but no specification file arrived
-> with the package (the three data files plus the SNV/InDel screenshot were
-> all that came through). Rather than guess, the writer supports three
-> conventions behind a `--header-style` flag. Switching is a one-flag
-> re-emission and does **not** require re-running translation, so if the
-> real specification turns out to be a fourth layout, adding it is a single
-> formatter function in `src/v2p/fasta.py` — the sequences are unaffected.
-
-All three styles carry the variant-type information the email asked for.
-
----
 
 ## Variant-type vocabulary
 
