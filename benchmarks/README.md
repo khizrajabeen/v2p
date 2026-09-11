@@ -43,8 +43,8 @@ The `clinvar_review_status` column is the thing to filter on — 8 rows are
 conflicts", 229 "criteria provided, single submitter", and **73 carry "no
 assertion criteria provided"**. Treat that last group as unreviewed.
 
-The filename says `cosmic` for continuity with the `docs/BUILD_SPEC.md`
-contract; the contents are ClinVar. COSMIC requires a licence for bulk
+The filename says `cosmic` for historical continuity; the contents are
+ClinVar. COSMIC requires a licence for bulk
 download.
 
 ## `truth/editing_sites.tsv` — 5 ADAR recoding sites
@@ -67,13 +67,11 @@ reintroduce hand-typed coordinates here.
 
 ## Not present
 
-`truth/fusions.tsv` is specified in `docs/BUILD_SPEC.md` but is not
-included: the published breakpoints for BCR–ABL1, EML4–ALK and
+`truth/fusions.tsv` is not included: the published breakpoints for BCR–ABL1, EML4–ALK and
 TMPRSS2–ERG could not be verified to the standard of the two files above,
 and an unverified fusion truth set is worse than none. The three fusions
 in `examples/fusions.csv` are illustrative input, not truth data.
 
-`compare_tools.md`, specified in `docs/BUILD_SPEC.md`, is not written: it
-would require installing ProteoDisco and pypgatk and running the same
-truth set through them, which has not been done. Until it is, v2p's
-figures stand alone and imply nothing about the competition.
+A ProteoDisco comparison is not included: its R/Bioconductor environment
+could not be installed here, and `run_proteodisco.R` is the driver for
+anyone who can. The pypgatk comparison is in `compare_tools.md`.

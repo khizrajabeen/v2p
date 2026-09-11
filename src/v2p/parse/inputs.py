@@ -39,6 +39,33 @@ def classify_small_variant(ref: str, alt: str) -> str:
     return "INDEL"
 
 
+_AF_KEYS = ("AF", "VAF", "AF_ALT")
+
+
+def _info_af(info: str) -> float | None:
+    """Allele frequency from an INFO field, or None if it says nothing.
+
+    `AF` is the VCF specification's key. `VAF` is what several somatic
+    callers write instead - the SEQC2 truth set among them - and it
+    means the same thing here, so both are read. A multi-allelic value
+    ("0.2,0.8") takes the first, matching the row's first ALT.
+
+    None means "not stated", which is not the same as zero: a variant
+    whose frequency is unknown must not be silently dropped by a
+    frequency filter.
+    """
+    if not info:
+        return None
+    for field in info.split(";"):
+        key, _, value = field.partition("=")
+        if key in _AF_KEYS and value:
+            try:
+                return float(value.split(",")[0])
+            except ValueError:
+                return None
+    return None
+
+
 def _phase(fields: list[str], alt_index: int) -> tuple[str, frozenset]:
     """(phase set, haplotypes carrying this ALT) from the first sample.
 
@@ -114,6 +141,7 @@ def parse_vcf(path: str | Path,
                         "chrom": chrom, "pos": pos, "ref": ref, "alt": alt,
                         "vcf_id": vid, "filter": flt, "info": info,
                         "phase_set": phase_set, "haplotypes": sorted(haps),
+                        "af": _info_af(info),
                     },
                 }
     if logger:

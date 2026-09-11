@@ -181,6 +181,23 @@ the fact.
 the annotation source's own by more than `--min-agreement` allows. Usually
 a mismatched genome and GTF release.
 
+## What the tool refuses to do
+
+Some situations end the run rather than produce a database that looks
+fine and is not:
+
+- **mixed genome builds** — a GTF and genome from different assemblies
+- **an undeterminable annotation release**, when the run is asked to be
+  reproducible: a release that cannot be named cannot be recorded
+- **an evidence file that parses but yields zero records** — silence
+  there almost always means a format mismatch, not an empty call set
+
+## Deliberately out of scope
+
+MHC binding prediction, expression filtering, clinical interpretation,
+and a graphical interface. Each is a different product, and pVACtools
+already does the first two well.
+
 ## Checking the reference itself
 
 ```bash

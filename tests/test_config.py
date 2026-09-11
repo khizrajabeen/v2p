@@ -179,7 +179,7 @@ def main() -> int:
           str(load_config(p).source))
 
     # ------------------------------------------------ provenance coverage
-    # BUILD_SPEC M2: "every config key appears in the provenance JSON".
+    # Contract: every config key appears in the provenance JSON.
     # to_dict() is what the CLI hands to RunLogger.add_params, so the test
     # is that it covers the schema exactly.
     flat = {f"{s}.{k}" for s, vals in a.to_dict().items() for k in vals}

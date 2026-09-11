@@ -287,6 +287,11 @@ def cmd_run(args: argparse.Namespace) -> int:
          *(["--combine-variants"] if args.combine_variants else []),
          *([] if args.allow_unphased else ["--no-allow-unphased"]),
          "--combine-max", str(args.combine_max),
+         *(["--min-af", str(args.min_af)]
+           if args.min_af is not None else []),
+         *(["--max-combinatorial-fraction",
+            str(args.max_combinatorial_fraction)]
+           if args.max_combinatorial_fraction is not None else []),
          "--emit-disposition", str(work / "tables" / "disposition.tsv"),
          "--outdir", str(work)]
     if args.keep_unchanged:
@@ -454,6 +459,14 @@ def _add_run_arguments(r: argparse.ArgumentParser,
            "is honoured where the caller reports GT/PS, and variants on "
            "opposite haplotypes are never combined; without phase the entry "
            "is a hypothesis, marked unphased. OFF by default.")
+    A("--min-af", type=float, default=None,
+      help="drop variants whose INFO allele frequency is below this. A "
+           "variant whose INFO states no frequency is kept, because "
+           "unknown is not zero, and its disposition records that.")
+    A("--max-combinatorial-fraction", type=float, default=None,
+      help="fail if combinatorial entries would exceed this share of the "
+           "database (0-1). Database inflation costs FDR power, so this "
+           "turns silent growth into a refusal.")
     A("--combine-max", type=int, default=8,
       help="most variants combined on one transcript (default 8). Above "
            "this a transcript is far likelier to be an alignment artefact "
@@ -513,7 +526,7 @@ def _add_run_arguments(r: argparse.ArgumentParser,
 
     # -- reproducibility -------------------------------------------------
     A("--config", metavar="FILE",
-      help="run configuration in YAML, per docs/TOOL_DESIGN.md. Anything "
+      help="run configuration in YAML, per docs/USAGE.md. Anything "
            "also given on the command line wins over the file.")
     A("--write-config", metavar="FILE",
       help="write the configuration this command line implies to FILE and "

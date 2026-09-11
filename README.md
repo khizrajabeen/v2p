@@ -186,6 +186,8 @@ Detection can be bypassed per evidence type:
 | `--combine-variants` | emit proteins carrying all co-occurring variants on a haplotype |
 | `--combine-max <n>` | most variants combined on one transcript, default 8 |
 | `--no-allow-unphased` | keep only combinations the caller actually phased |
+| `--min-af <f>` | drop variants below this INFO allele frequency |
+| `--max-combinatorial-fraction <f>` | fail rather than inflate the database past this share |
 | `--include-noncanonical` | three-frame translate non-coding transcripts |
 | `--split-by-type` / `--no-split` | per-variant-type FASTA files |
 
@@ -247,10 +249,10 @@ to state a recovery rate honestly.
 | GENCODE translation agreement | **100%** (single-transcript build) |
 | vs pypgatk 0.0.24, locus coverage | **260/260** against 259/260 |
 | combinatorial entries on HCC1395 | **9 kept**, 40 dropped as adding no peptide |
-| tests | **336**, offline, seconds |
+| tests | **344**, offline, seconds |
 
 ```bash
-make test                                   # 336 assertions, no reference needed
+make test                                   # 344 assertions, no reference needed
 make reproducibility                        # two runs from one config, byte-identical
 python3 scripts/09_benchmark.py --ref ref/  # the benchmark
 ```
@@ -272,10 +274,30 @@ a library update cannot change a translation silently. Transcript ties
 break deterministically: MANE_Select → Ensembl_canonical → basic →
 longest CDS → longest transcript → id.
 
+## Limitations
+
+- **Combining is not unique to v2p.** ProHap does it for phased germline
+  haplotypes and does it well. What is unique here is combining *across*
+  evidence types — see [how v2p compares](#how-v2p-compares).
+- **Cross-evidence combination is not yet demonstrated on real data.** In
+  HCC1395, 40 transcripts carry both a somatic variant and an editing
+  site, but in none of them do both recode, so the measured count is 0.
+  The capability is proven by test and by a constructed case, not by an
+  observation.
+- **Unphased combinations are hypotheses.** Where a caller reports no
+  phase, co-occurrence is assumed, not known. Entries say which they are
+  in `PHASE=`, and `--no-allow-unphased` drops them.
+- **2 benchmark disagreements remain**, both the same FGFR3 variant
+  (duplicated in the truth set) where isoform numbering differs.
+- **Only genetic-code tables 1 and 2 are implemented.** A species needing
+  the invertebrate (5) or yeast (3) mitochondrial table is **refused**
+  rather than silently translated with the wrong one.
+
 ## Documentation
 
 - [docs/USAGE.md](docs/USAGE.md) — running your own data
 - [docs/FORMAT_SPEC.md](docs/FORMAT_SPEC.md) — header grammar, all four styles
+- [benchmarks/](benchmarks/) — truth sets, tool comparisons, how to rerun them
 
 ## Licence
 

@@ -1,6 +1,6 @@
 name: tests
 
-# Milestone 6 contract (docs/BUILD_SPEC.md): "test suite on Python 3.10
+# The contract: the test suite runs on Python 3.10
 # through 3.13, no reference download, under two minutes".
 #
 # The suite is deliberately cheap. tests/test_pipeline.py and
@@ -79,7 +79,7 @@ jobs:
           import sys
 
           _MSG = ("network access is disabled: the v2p suite must run fully "
-                  "offline (docs/BUILD_SPEC.md, Milestone 6)")
+                  "offline")
 
 
           class _OfflineSocket(socket.socket):

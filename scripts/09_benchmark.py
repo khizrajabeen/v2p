@@ -348,7 +348,7 @@ def main() -> int:
     ap.add_argument("--workdir", help="keep the intermediate run here")
     ap.add_argument("--vep-consequences", default="",
                     help="TSV from scripts/10_vep_annotate.py. Adds an "
-                         "independent consequence cross-check (BUILD_SPEC "
+                         "independent consequence cross-check ("
                          "milestone 7d). VEP is a second opinion, not "
                          "ground truth.")
     ap.add_argument("--min-review-status", default="asserted",

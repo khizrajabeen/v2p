@@ -37,7 +37,7 @@ from v2p.build.combinatorial import (                       # noqa: E402
 )
 from v2p.build.smallvar import build_small_variant_proteins  # noqa: E402
 from v2p.fasta import write_fasta                           # noqa: E402
-from v2p.parse.inputs import _phase, parse_vcf              # noqa: E402
+from v2p.parse.inputs import _info_af, _phase, parse_vcf    # noqa: E402
 from v2p.seqops import table_for_contig, translate_orf      # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures"
@@ -121,6 +121,19 @@ def test_allele_notation() -> None:
     long = _allele_changes("A" * 20, "C" * 20, limit=3)
     check("an implausibly long change list is capped",
           len(long) == 4 and long[-1] == "+17_more", str(long[-1]))
+
+
+def test_allele_frequency() -> None:
+    """A frequency filter must not act on silence."""
+    check("AF is read from INFO", _info_af("DP=50;AF=0.25;MQ=60") == 0.25)
+    check("VAF is accepted too, since somatic callers write it",
+          _info_af("DP=50;VAF=0.98") == 0.98)
+    check("a multi-allelic AF takes the first value",
+          _info_af("AF=0.2,0.8") == 0.2)
+    check("INFO without a frequency says nothing, not zero",
+          _info_af("DP=50;MQ=60") is None)
+    check("an empty INFO says nothing", _info_af("") is None)
+    check("a malformed AF is not guessed at", _info_af("AF=high") is None)
 
 
 def test_phase_grouping() -> None:
@@ -263,6 +276,22 @@ def test_phased_vcf_to_fasta(meta, ann, gen) -> None:
           diff_off == [] and ">" not in diff_off_fa,
           f"{len(diff_off)} record(s)")
 
+    # The AF filter, through a real VCF: the payload must carry the
+    # frequency, and silence must survive it.
+    rows = list(parse_vcf(write_vcf(tmp / "af.vcf", [
+        ("chrT1", p3, r3, a3, "GT", "0/1")])))
+    check("a variant with no INFO frequency is not assigned one",
+          rows[0]["payload"]["af"] is None, str(rows[0]["payload"]["af"]))
+
+    with open(tmp / "af2.vcf", "w", encoding="utf-8") as fh:
+        fh.write(VCF_HEAD)
+        fh.write(f"chrT1\t{p3}\t.\t{r3}\t{a3}\t.\tPASS\tDP=40;AF=0.12\t"
+                 f"GT\t0/1\n")
+    rows2 = list(parse_vcf(tmp / "af2.vcf"))
+    check("a stated frequency reaches the payload",
+          rows2[0]["payload"]["af"] == 0.12,
+          str(rows2[0]["payload"]["af"]))
+
     # An unphased pair is still admitted by default: that is the common
     # case, and HCC1395's own VCF is sites-only.
     plain, _ = build([("chrT1", p3, r3, a3, "GT", "0/1"),
@@ -277,6 +306,7 @@ def test_phased_vcf_to_fasta(meta, ann, gen) -> None:
 def main() -> int:
     test_peptide_necessity()
     test_allele_notation()
+    test_allele_frequency()
     test_phase_grouping()
     test_vcf_phase_parsing()
 

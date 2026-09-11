@@ -1,4 +1,4 @@
-"""Run configuration: the YAML schema documented in docs/TOOL_DESIGN.md.
+"""Run configuration: the YAML schema documented in docs/USAGE.md.
 
 One config file plus the input checksums must fully determine a run, so
 this module is the single place that knows
@@ -118,6 +118,11 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
             comment="most variants combined on one transcript"),
         Key("allow_unphased", "allow_unphased", "bool", True,
             comment="combine variants the caller did not phase"),
+        Key("min_af", "min_af", "float", None,
+            comment="drop variants below this INFO allele frequency"),
+        Key("max_combinatorial_fraction", "max_combinatorial_fraction",
+            "float", None,
+            comment="fail if combinatorial entries exceed this share"),
     ),
     "output": (
         Key("dir", "outdir", "path", "v2p_output"),

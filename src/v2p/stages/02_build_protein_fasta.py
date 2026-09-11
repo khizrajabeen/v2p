@@ -91,6 +91,15 @@ def main() -> int:
                          "phase. Default is to allow them, because "
                          "sites-only and unphased VCFs are the common "
                          "case, but each entry records PHASE= either way")
+    ap.add_argument("--min-af", type=float, default=None,
+                    help="drop variants whose INFO allele frequency is "
+                         "below this. Variants whose INFO states no "
+                         "frequency are kept, because unknown is not the "
+                         "same as zero; the disposition records that.")
+    ap.add_argument("--max-combinatorial-fraction", type=float, default=None,
+                    help="fail if combinatorial entries would exceed this "
+                         "share of the database (0-1), rather than "
+                         "silently inflating it")
     ap.add_argument("--combine-missed-cleavages", type=int, default=2,
                     help="missed cleavages used to decide whether a "
                          "combination yields a peptide that no "
@@ -185,6 +194,17 @@ def main() -> int:
             break
         p = row["payload"]
         rl.count(f"input.{vclass}")
+        # A frequency filter must not act on silence: a variant whose
+        # INFO states no AF is kept, and says so in its disposition.
+        af = p.get("af")
+        if args.min_af is not None and af is not None and af < args.min_af:
+            rl.count(f"outcome.{vclass}.below_min_af")
+            disposition.append({"variant_id": row["variant_id"],
+                                "variant_class": vclass,
+                                "n_proteins": 0,
+                                "outcome": "below_min_af",
+                                "detail": f"af={af}<{args.min_af}"})
+            continue
         try:
             if vclass in SMALL_CLASSES:
                 combinable.append(CombinableVariant(
@@ -382,6 +402,25 @@ def main() -> int:
         rl.count('combinatorial.total', len(combos))
         rl.count('combinatorial.phased', n_phased)
         rl.count('combinatorial.cross_evidence', n_cross)
+
+        # What the combining cost the database, stated rather than left
+        # for the reader to work out: a bigger search space costs
+        # sensitivity at a fixed FDR, so the price belongs next to the
+        # feature.
+        total = len(records) + len(combos)
+        frac = (len(combos) / total) if total else 0.0
+        rl.log.info('combinatorial entries are %.2f%% of the database '
+                    '(%d of %d)', 100 * frac, len(combos), total)
+        rl.count('combinatorial.percent_of_database', round(100 * frac, 2))
+        if (args.max_combinatorial_fraction is not None
+                and frac > args.max_combinatorial_fraction):
+            rl.log.error('combinatorial entries are %.2f%% of the database, '
+                         'above the --max-combinatorial-fraction limit of '
+                         '%.2f%%. Refusing to write a database that was not '
+                         'asked for; raise the limit or tighten --combine-max '
+                         'or --min-af.',
+                         100 * frac, 100 * args.max_combinatorial_fraction)
+            return 2
         records.extend(combos)
 
     if args.include_noncanonical:

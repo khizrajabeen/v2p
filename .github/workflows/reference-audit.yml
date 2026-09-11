@@ -1,6 +1,6 @@
 # Milestone 7c - continuous reference auditing.
 #
-# The point is stated in docs/BUILD_SPEC.md: "When GENCODE releases a new
+# The point: when GENCODE releases a new
 # version, the audit tells you what changed about the *interface* - new
 # feature types, changed tag vocabulary, altered frame conventions -
 # before it silently changes your output."

@@ -8,7 +8,7 @@ Two things need this, and neither could be done without it:
      nothing, writes nothing, and exits 0 - so the cross-tool benchmark
      cannot run at all until the input is annotated.
   2. An independent second opinion on our own consequence calls
-     (docs/BUILD_SPEC.md, milestone 7d). VEP is not ground truth, but a
+     VEP is not ground truth, but a
      disagreement is worth looking at, and agreement between two
      independent implementations is worth more than either alone.
 
