@@ -65,6 +65,36 @@ This matters: four of these five coordinates were first written from
 memory and were **wrong**. The derivation caught all four. Do not
 reintroduce hand-typed coordinates here.
 
+## The search for a cross-evidence dataset
+
+v2p's one unique claim is combining an RNA editing site with a DNA
+variant on one transcript. Demonstrating it needs a sample whose calls
+contain both, co-located. HCC1395 does not, and that was measured rather
+than assumed:
+
+| check | count |
+|---|---|
+| transcripts carrying both an editing site and a DNA variant | 40 |
+| of those, transcripts where **both** recode | **0** |
+| genes with a recoding edit *and* a recoding DNA variant | **0** |
+
+29 genes carry a recoding edit, 278 carry a recoding DNA variant, and
+the sets do not intersect. The 40 transcripts that carry both have the
+editing site in a UTR or at a synonymous position, so no combined
+proteoform arises.
+
+Public alternatives were searched for. SEQC2 publishes WGS, WES and
+RNA-seq for HCC1395 but no consensus A-to-I call set. REDIportal
+publishes 4,388 nonsynonymous recoding sites, but its bulk download is
+behind a form and the direct paths tried all returned 404. Nothing found
+offers both call types, on one sample, in a form that can be downloaded
+and re-run.
+
+So `cross_evidence_case.md` is **constructed**, and says so: a real
+recoding editing site from HCC1395 plus a synthetic SNV placed in the
+same tryptic peptide. It shows the mechanism, not how often such
+proteoforms occur.
+
 ## Not present
 
 `truth/fusions.tsv` is not included: the published breakpoints for BCR–ABL1, EML4–ALK and
