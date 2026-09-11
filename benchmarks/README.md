@@ -65,6 +65,18 @@ This matters: four of these five coordinates were first written from
 memory and were **wrong**. The derivation caught all four. Do not
 reintroduce hand-typed coordinates here.
 
+## Checks the README does not have room for
+
+The README's "Measured" table is capped at six rows. The rest of what is
+verified:
+
+| check | result | where |
+|---|---|---|
+| ClinVar, all 336 rows including unasserted | 99.4% recall and precision | `results/benchmark.md` |
+| A-to-I editing positive controls | 5/5 | `truth/editing_sites.tsv`, `results/benchmark.md` |
+| GENCODE translation agreement | 100% on a single-transcript build | the `--min-agreement` gate, and `qc/` in any release |
+| combinatorial entries kept vs dropped | 9 kept, 40 dropped for adding no peptide | [USAGE](../docs/USAGE.md#combinatorial-proteoforms) |
+
 ## ProVar comparison
 
 `provar_comparison.md` holds the table; `run_provar.sh` rebuilds it from

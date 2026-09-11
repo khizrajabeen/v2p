@@ -1,5 +1,43 @@
 # Running your own dataset
 
+Everything the README does not have room for: installation, the full
+option reference, what each output file holds, and what to do when a run
+stops.
+
+- [Installation](#installation)
+- [The short version](#the-short-version)
+- [Step 1 — put the reference in place, once](#step-1--put-the-reference-in-place-once)
+- [Step 2 — put your calls in a folder](#step-2--put-your-calls-in-a-folder)
+- [Step 3 — check what was detected](#step-3--check-what-was-detected)
+- [Step 4 — convert](#step-4--convert)
+- [What you get](#what-you-get)
+- [Reading a header](#reading-a-header)
+- [Command reference](#command-reference)
+  - [Main interface](#main-interface)
+  - [Choosing a reference](#choosing-a-reference)
+  - [Naming inputs explicitly](#naming-inputs-explicitly)
+  - [Output control](#output-control)
+  - [Reproducibility](#reproducibility)
+  - [Flags worth knowing](#flags-worth-knowing)
+- [Combinatorial proteoforms](#combinatorial-proteoforms)
+- [About `--include-noncanonical`](#about---include-noncanonical)
+- [Reproducing a run](#reproducing-a-run)
+- [Non-human data](#non-human-data)
+- [How it works](#how-it-works)
+- [Analysis scripts](#analysis-scripts)
+- [When something goes wrong](#when-something-goes-wrong)
+- [What the tool refuses to do](#what-the-tool-refuses-to-do)
+- [Deliberately out of scope](#deliberately-out-of-scope)
+- [Checking the reference itself](#checking-the-reference-itself)
+
+## Installation
+
+```bash
+pip install .
+```
+
+Python 3.10–3.13. The only runtime dependency is `pyfaidx`.
+
 ## The short version
 
 ```bash
@@ -15,11 +53,16 @@ recognised, how confident it is, and what it would do.
 ## Step 1 — put the reference in place, once
 
 ```bash
-bash scripts/00_fetch_references.sh ref/
+bash scripts/00_fetch_references.sh ref/                     # GRCh38, the default
+bash scripts/00_fetch_references.sh ref37/  --assembly GRCh37
+bash scripts/00_fetch_references.sh reft2t/ --assembly T2T
 ```
 
-Downloads GRCh38 plus GENCODE v44 (~18 GB) and asserts the build. Do it
-once; it is the same for every sample.
+Each downloads the genome, annotation and — where the source publishes
+them — the annotation's own protein translations, then asserts the build
+by contig length before you spend an hour translating against the wrong
+one. `GENCODE_RELEASE=45 bash scripts/00_fetch_references.sh ref/` picks a
+different release. Do it once; it is the same for every sample.
 
 You also need a reference proteome FASTA (UniProt SwissProt for your
 species) in the same directory. `detect --ref ref/` will say if it is
@@ -82,19 +125,18 @@ invariant will correctly fail the run.
 
 ## What you get
 
-```
-out/
-  MYSAMPLE.target.fasta          the database — search this
-  MYSAMPLE.target_decoy.fasta    the same, with decoys appended
-  MYSAMPLE.entries.tsv           one row per sequence: class, gene,
-                                 transcript, protein change, peptide counts
-  MYSAMPLE.summary_by_class.tsv  composition at a glance
-  by_class/                      one FASTA per variant type
-  qc/                            validation and recovery reports
-  METHODS.md                     what was done, in prose
-  MANIFEST.txt                   SHA-256 of every file
-  _work/tables/disposition.tsv   one row per INPUT variant and its fate
-```
+| file | what it is |
+|---|---|
+| `<name>.target.fasta` | the database — search this |
+| `<name>.target_decoy.fasta` | the same, with decoys appended |
+| `<name>.entries.tsv` | one row per sequence: class, gene, transcript, protein change, peptide counts |
+| `<name>.summary_by_class.tsv` | composition per variant type |
+| `by_class/` | one FASTA per variant type, so each can be searched separately |
+| `tables/provenance.jsonl` | one record per sequence, naming every variant that produced it |
+| `tables/peptide_provenance.tsv` | one row per novel peptide, and whether it spans the variant residue |
+| `_work/tables/disposition.tsv` | one row per **input** variant and its fate |
+| `qc/` | validation and per-class recovery reports |
+| `MANIFEST.txt` | SHA-256 of every file; invariant I8 verifies it against disk |
 
 `disposition.tsv` is the one people forget. Every input variant appears in
 it exactly once, including the ones that produced nothing, with the reason
@@ -114,10 +156,88 @@ way to state a recovery rate honestly.
 separate them on the database field alone. `VT=` variant type, `CSQ=`
 consequence, `PC=` protein change, `NOVELPEP=` peptides absent from the
 reference proteome, `VARPEP=` how many of those span the variant residue.
+Combinatorial entries also carry `PHASE=phased` or `PHASE=unphased`.
 
-Full grammar in `docs/FORMAT_SPEC.md`.
+Full grammar in [FORMAT_SPEC.md](FORMAT_SPEC.md).
 
-## Flags worth knowing
+## Command reference
+
+### Main interface
+
+| command | description |
+|---|---|
+| `v2p detect <folder>` | identify inputs by content and print the run plan |
+| `v2p run <folder>` | the whole conversion, ending in the invariant report |
+| `v2p audit --ref <dir>` | verify the GTF, genome and proteome are read correctly |
+
+### Choosing a reference
+
+Any reference release or assembly works — nothing is pinned in code.
+Either point at a directory and let detection sort it out, or name each
+file:
+
+| option | description |
+|---|---|
+| `--ref <dir>` | directory holding genome, annotation and proteome |
+| `--genome <fa>` | reference genome FASTA, explicit |
+| `--annotation <gtf>` | GTF/GFF annotation, explicit |
+| `--proteome <fa>` | reference proteome FASTA, explicit |
+| `--translations <fa>` | the annotation source's own protein translations |
+| `--species <name\|yaml>` | `human`, `human_grch37`, `human_t2t`, `mouse`, `rat`, `zebrafish`, or a YAML path |
+
+```bash
+# a different assembly or release, no --ref at all
+v2p run calls/ \
+    --genome       /refs/GRCh38.primary_assembly.genome.fa \
+    --annotation   /refs/gencode.v44.annotation.gtf.gz \
+    --proteome     /refs/uniprot_human_SP.fasta \
+    --translations /refs/gencode.v44.pc_translations.fa.gz \
+    --outdir out/
+```
+
+Supply `--translations` whenever you can. It enables the GENCODE
+translation check, the gate that actually decides whether the conversion
+is right. Without it, validation falls back to comparing against UniProt
+canonical, which disagrees on start codons often enough to fail the
+threshold for reasons that are not errors.
+
+### Naming inputs explicitly
+
+Detection can be bypassed per evidence type:
+
+| option | description |
+|---|---|
+| `--small-variants <vcf>` | somatic SNV/InDel calls |
+| `--rna-editing <txt>` | A-to-I editing table (ANNOVAR-style) |
+| `--fusion-calls <csv>` | gene fusion calls |
+| `--splicing <csv>` | alternative splicing events (SUPPA2 ids) |
+
+### Output control
+
+| option | description |
+|---|---|
+| `--header-style uniprot\|peff\|pvac\|descriptive` | re-emit without re-translating |
+| `--decoys none\|reverse\|pseudo_reverse\|shuffle` | target-decoy strategy |
+| `--transcript-mode all\|representative` | every transcript, or one per gene |
+| `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |
+| `--combine-variants` | emit proteins carrying all co-occurring variants on a haplotype |
+| `--combine-max <n>` | most variants combined on one transcript, default 8 |
+| `--no-allow-unphased` | keep only combinations the caller actually phased |
+| `--min-af <f>` | drop variants below this INFO allele frequency |
+| `--max-combinatorial-fraction <f>` | fail rather than inflate the database past this share |
+| `--include-noncanonical` | three-frame translate non-coding transcripts |
+| `--split-by-type` / `--no-split` | per-variant-type FASTA files |
+
+### Reproducibility
+
+| option | description |
+|---|---|
+| `--config <yaml>` | run from a config file |
+| `--write-config <yaml>` | emit the config a command line implies |
+| `--min-agreement <f>` | translation-agreement gate, default 0.90 |
+| `--skip-invariant <ID>` | turn off one release check, recorded in provenance |
+
+### Flags worth knowing
 
 | flag | why |
 |---|---|
@@ -130,13 +250,57 @@ Full grammar in `docs/FORMAT_SPEC.md`.
 | `--min-agreement 0.95` | raise the translation-agreement gate |
 | `--skip-invariant I5` | turn off one release check, recorded in the provenance JSON |
 
-### About `--include-noncanonical`
+## Combinatorial proteoforms
 
-On the example data it takes the database from 20,531 to 123,404
-sequences — six times larger. An inflated search space costs sensitivity:
-more candidate peptides means a higher score threshold at the same FDR, so
-you lose real identifications elsewhere. Turn it on when you are
-specifically hunting lncRNA-derived peptides, not by default.
+`--combine-variants` emits, for each transcript carrying two or more
+co-occurring variants, the protein carrying *all* of them.
+
+The reason is peptide-level. A tryptic peptide spanning two variants is in
+neither single-variant entry nor the reference, so a database built one
+variant at a time cannot identify it at any FDR.
+[ProHap](https://doi.org/10.1038/s41592-024-02506-0) measured this at
+12.4% of substitutions for common germline haplotypes; on HCC1395's
+sparser somatic calls it is 2.9%.
+
+Two variants can even share a codon. In HCC1395, FKTN carries
+`p.[D225K]` — a lysine neither single-variant entry produces, and one
+that creates a tryptic cleavage site, changing the peptides on both
+sides of it.
+
+Three rules keep this from inflating the database:
+
+- **Every entry must earn its place.** A combination is emitted only if
+  at least one of its tryptic peptides is absent from the reference *and*
+  from every single-variant protein of the same transcript. On HCC1395
+  that drops 40 of 49 candidates and keeps 9.
+- **Phase is honoured where the caller reports it.** With `GT` and `PS`,
+  variants combine within a haplotype, and two on opposite haplotypes are
+  never combined — that combination is not uncertain, it is false. A
+  homozygous variant joins both haplotypes.
+- **Without phase, the entry is a hypothesis**, marked `PHASE=unphased`
+  in its header so a search can filter it out later.
+  `--no-allow-unphased` drops them at build time instead.
+
+Protein changes use HGVS allele notation, which distinguishes the two
+cases: `p.[A12V;G45S]` when phased, `p.[A12V(;)G45S]` when not.
+
+`--combine-max` caps how many variants are combined on one transcript
+(default 8); above that, a transcript is far likelier to be an alignment
+artefact than a real proteoform.
+
+## About `--include-noncanonical`
+
+Three-frame translation of lncRNAs, pseudogenes, and the 5′/3′ UTRs of
+coding transcripts (uORFs and dORFs), with the reading frame recorded per
+entry and a configurable length floor. Entries identical to a reference
+protein are dropped rather than duplicating the database.
+
+It is off by default for a reason. On the example data it takes the
+database from 20,531 to 123,404 sequences — six times larger. An inflated
+search space costs sensitivity: more candidate peptides means a higher
+score threshold at the same FDR, so you lose real identifications
+elsewhere. Turn it on when you are specifically hunting lncRNA-derived
+peptides, not by default.
 
 ## Reproducing a run
 
@@ -156,10 +320,41 @@ checksums fully determine the output.
 v2p run mycalls/ --ref ref_mouse/ --species mouse --outdir out/
 ```
 
-Ships with human and mouse. For anything else, drop a YAML into
-`config/species/` — copy `config/species/mouse.yaml` — and pass its name or
-path. Only headers and the audit's contig-length assertions change; the
-translation logic is species-neutral.
+Human, mouse, rat and zebrafish ship, along with GRCh37 and T2T profiles
+for human. For anything else, drop a YAML into `config/species/` — copy
+`config/species/mouse.yaml` — and pass its name or path. Only headers and
+the audit's contig-length assertions change; the translation logic is
+species-neutral.
+
+A species needing a genetic-code table other than 1 (standard) or 2
+(vertebrate mitochondrial) is **refused** rather than translated with the
+wrong one.
+
+## How it works
+
+Variants apply to the **mature transcript**, not to genomic sequence.
+That is what lets one code path serve DNA variants and RNA editing: an
+A-to-I edit is indistinguishable from a genomic A>G at transcript level.
+Translation runs from the annotated start to the first stop; frameshifts
+read into the 3′ UTR.
+
+Genomic coordinates are 1-based inclusive; transcript and CDS offsets are
+0-based from the 5′ end. The genetic code is hard-coded in `seqops.py` so
+a library update cannot change a translation silently. Transcript ties
+break deterministically: MANE_Select → Ensembl_canonical → basic →
+longest CDS → longest transcript → id.
+
+## Analysis scripts
+
+| script | description |
+|---|---|
+| `scripts/09_benchmark.py` | score against the truth sets, per category |
+| `scripts/10_vep_annotate.py` | annotate a VCF via Ensembl VEP REST (no local cache) |
+| `benchmarks/run_provar.sh` | run ProVar (ProHap's companion) on the same VCF |
+| `benchmarks/compare_provar.py` | score v2p against a ProVar database |
+| `benchmarks/cooccurrence_stat.py` | how often two substitutions share a peptide |
+| `benchmarks/cross_evidence_case.py` | the worked cross-evidence proteoform |
+| `benchmarks/run_proteodisco.R` | run ProteoDisco on the same reference |
 
 ## When something goes wrong
 
