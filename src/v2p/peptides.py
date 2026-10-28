@@ -127,20 +127,43 @@ def decoy_pseudo_reverse(seq: str) -> str:
     return "".join(out)
 
 
-def decoy_shuffle(seq: str, seed: int = 0) -> str:
-    """Deterministic within-peptide shuffle, C-terminal residue fixed."""
+def decoy_shuffle(seq: str, seed: int = 0, max_tries: int = 10) -> str:
+    """Deterministic within-peptide shuffle, C-terminal residue fixed.
+
+    Every fragment is shuffled, including the protein's last one, which
+    ends at no cleavage site: skipping it copied a genuine target peptide
+    into the decoy once per protein, and target/decoy overlap biases the
+    FDR these decoys exist to estimate.
+
+    Proline holds its position too. Trypsin does not cleave K-P or R-P,
+    so a free proline can move next to a K and destroy a cleavage site,
+    leaving the decoy with a different peptide count from the target.
+    OpenMS pins K, R and P for the same reason.
+
+    A shuffle can land back on the input, so it is retried. A fragment
+    with fewer than two free positions is returned unchanged.
+    """
     import random
 
     rng = random.Random(seed)
-    frags = [f for f in _TRYPSIN.split(seq) if f]
     out = []
-    for f in frags:
-        if len(f) > 2 and f[-1] in "KR":
-            body = list(f[:-1])
-            rng.shuffle(body)
-            out.append("".join(body) + f[-1])
-        else:
+    for f in (f for f in _TRYPSIN.split(seq) if f):
+        body, tail = f[:-1], f[-1]
+        free = [i for i, aa in enumerate(body) if aa != "P"]
+        if len(free) < 2:
             out.append(f)
+            continue
+        shuffled = f
+        for _ in range(max_tries):
+            order = free[:]
+            rng.shuffle(order)
+            chars = list(body)
+            for dst, src in zip(free, order):
+                chars[dst] = body[src]
+            shuffled = "".join(chars) + tail
+            if shuffled != f:
+                break
+        out.append(shuffled)
     return "".join(out)
 
 

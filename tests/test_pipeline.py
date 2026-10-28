@@ -21,7 +21,7 @@ from v2p.build.smallvar import (                           # noqa: E402
     _tx_interval, build_small_variant_proteins,
 )
 from v2p.build.splicing import (                           # noqa: E402
-    event_junctions, transcript_junctions,
+    _construct_exons, event_junctions, transcript_junctions,
 )
 from v2p.fasta import HEADER_STYLES, write_fasta           # noqa: E402
 from v2p.parse.inputs import (                             # noqa: E402
@@ -299,6 +299,63 @@ def main() -> int:
     check("AF with wrong pair count is rejected",
           event_junctions("AF", [[1], [2], [3], [4]]) is None)
 
+    # A3/A5 are non-symmetrical too: the shared coordinate sits first
+    # for A3 on '+' and A5 on '-', second for the other two.
+    a3p = parse_suppa_event_id(
+        "E;A3:chr1:169803309-169804075:169803309-169804112:+")
+    a3m = parse_suppa_event_id(
+        "E;A3:chr20:50940955-50941105:50940933-50941105:-")
+    a5p = parse_suppa_event_id(
+        "E;A5:chr1:196690284-196701318:196690239-196701318:+")
+    a5m = parse_suppa_event_id(
+        "E;A5:chrX:100635746-100636191:100635746-100636608:-")
+    for label, parsed, want in (
+        ("A3 plus", a3p, {"form1": [(169803309, 169804075)],
+                          "form2": [(169803309, 169804112)]}),
+        ("A3 minus", a3m, {"form1": [(50940955, 50941105)],
+                           "form2": [(50940933, 50941105)]}),
+        ("A5 plus", a5p, {"form1": [(196690284, 196701318)],
+                          "form2": [(196690239, 196701318)]}),
+        ("A5 minus", a5m, {"form1": [(100635746, 100636191)],
+                           "form2": [(100635746, 100636608)]}),
+    ):
+        got = event_junctions(parsed["event_type"], parsed["coord_groups"])
+        check(f"{label}-strand A3/A5 junctions are the two real junctions",
+              got == want, str(got))
+        check(f"{label}-strand A3/A5 forms differ from each other",
+              got["form1"] != got["form2"], str(got))
+
+    # MX form2 must be read from its own groups, not rebuilt from form1's.
+    mxodd = event_junctions("MX", [[10, 20], [30, 40], [11, 21], [31, 41]])
+    check("MX form2 comes from its own coordinate groups",
+          mxodd == {"form1": [(10, 20), (30, 40)],
+                    "form2": [(11, 21), (31, 41)]}, str(mxodd))
+    check("MX with a malformed group is rejected",
+          event_junctions("MX", [[1, 2], [3], [5, 6], [7, 8]]) is None)
+
+    # The construction fallback finds the moving splice site the same way.
+    from v2p.annotation import Transcript as _Tx
+
+    # Shared coordinate second, alternatives are exon ends.
+    tx_a = _Tx(tx_id="TA", gene_id="GA", gene_name="GA", chrom="chr1",
+               strand="+", exons=[(100, 200), (300, 400)],
+               cds=[(100, 200), (300, 400)])
+    built = _construct_exons("A5", [[200, 300], [250, 300]], tx_a)
+    check("A3/A5 construction extends an exon end to the distal site",
+          built == [(100, 250), (300, 400)], str(built))
+
+    # Shared coordinate first, alternatives are exon starts.
+    tx_b = _Tx(tx_id="TB", gene_id="GB", gene_name="GB", chrom="chr1",
+               strand="-", exons=[(100, 200), (350, 400)],
+               cds=[(100, 200), (350, 400)])
+    built = _construct_exons("A3", [[200, 300], [200, 350]], tx_b)
+    check("A3/A5 construction extends an exon start to the distal site",
+          built == [(100, 200), (300, 400)], str(built))
+
+    # Alternatives matching no boundary of the template are refused.
+    check("A3/A5 construction refuses coordinates off the template",
+          _construct_exons("A3", [[700, 800], [750, 800]], tx_a) is None)
+
     # ------------------------------------------------------- FASTA emission
     recs = build_small_variant_proteins("chrT1", p, "A", "C", ann, gen,
                                         variant_class="SNV", genes="GPLUS")
@@ -362,6 +419,41 @@ def main() -> int:
           len(translate_orf(gen.blocks(t_sec.chrom, t_sec.exons, t_sec.strand)
                             [t_sec.cds_offset_in_tx():]).protein)
           < len(meta["GSEC@chrT4"]["protein"]))
+
+    # A 5'UTR indel moves where the mutant CDS begins, and the Sec codon
+    # indices are counted from there.
+    m_sec = meta["GSEC@chrT4"]
+    sec_utr_g = m_sec["exons"][0][0] + 5         # inside the 21 nt 5'UTR
+    sec_anchor = gen.fetch("chrT4", sec_utr_g, sec_utr_g)
+    r_sec = build_small_variant_proteins(
+        "chrT4", sec_utr_g, sec_anchor, sec_anchor + "G", ann, gen,
+        variant_class="INDEL", genes="GSEC")
+    check("a 5'UTR insertion does not truncate a selenoprotein",
+          len(r_sec) == 1 and r_sec[0].sequence == m_sec["protein"],
+          f"{r_sec[0].sequence if r_sec else 'none'} vs {m_sec['protein']}")
+    check("the 5'UTR insertion is labelled 5_prime_UTR",
+          len(r_sec) == 1 and r_sec[0].consequence == "5_prime_UTR",
+          r_sec[0].consequence if r_sec else "none")
+
+    # The combinatorial path uses the same Sec annotation as the
+    # reference it is compared against.
+    from v2p.build.combinatorial import _sec_codons as _combo_sec
+    sec_cds_off = t_sec.cds_offset_in_tx()
+    check("combinatorial Sec indices match the single-variant path "
+          "when nothing is placed",
+          _combo_sec(t_sec, sec_cds_off, []) ==
+          t_sec.sec_codon_indices(sec_cds_off),
+          f"{_combo_sec(t_sec, sec_cds_off, [])} vs "
+          f"{t_sec.sec_codon_indices(sec_cds_off)}")
+    sec_tx = t_sec.genomic_to_tx(t_sec.sec_sites[0])
+    check("a placement upstream of the Sec codon shifts its index with it",
+          _combo_sec(t_sec, sec_cds_off + 1, [(sec_cds_off - 3, 1, "AA")]) ==
+          t_sec.sec_codon_indices(sec_cds_off),
+          str(_combo_sec(t_sec, sec_cds_off + 1,
+                         [(sec_cds_off - 3, 1, "AA")])))
+    check("a placement inside the Sec codon drops it",
+          _combo_sec(t_sec, sec_cds_off, [(sec_tx, 1, "C")]) == set(),
+          str(_combo_sec(t_sec, sec_cds_off, [(sec_tx, 1, "C")])))
 
     t_mito = ann.representative("GMITO")
     check("chrM selects the vertebrate mitochondrial code",
@@ -455,6 +547,29 @@ def main() -> int:
           == len(digest("MAAAKBBBBRCCCCR", 0, 1)))
     check("plain reverse is a different decoy",
           decoy_reverse("MAAAK") == "KAAAM")
+
+    # A fragment copied verbatim is a target peptide in the decoy
+    # database. The protein's last fragment was the one being copied.
+    from v2p.peptides import _TRYPSIN, decoy_shuffle
+
+    def _trypsin_frags(s: str) -> list[str]:
+        return [f for f in _TRYPSIN.split(s) if f]
+
+    tail_seq = "MAAAKBBBBRCDEFGHIKLMNPQ"
+    shuffled = decoy_shuffle(tail_seq)
+    last_target = [f for f in digest(tail_seq, 0, 1) if not f[-1] in "KR"]
+    check("shuffle decoy keeps the sequence length",
+          len(shuffled) == len(tail_seq), shuffled)
+    check("shuffle decoy holds no fragment of the target verbatim",
+          all(f not in shuffled for f in last_target if len(f) >= 3),
+          f"{shuffled} vs {last_target}")
+    check("shuffle decoy keeps each fragment's C-terminal residue",
+          [f[-1] for f in _trypsin_frags(shuffled)]
+          == [f[-1] for f in _trypsin_frags(tail_seq)], shuffled)
+    check("shuffle decoy is deterministic",
+          decoy_shuffle(tail_seq) == shuffled)
+    check("shuffle decoy preserves tryptic peptide count",
+          len(digest(shuffled, 0, 1)) == len(digest(tail_seq, 0, 1)))
 
     check("junction offsets", junction_offsets([100, 200, 150]) == [100, 300])
     check("premature stop far upstream is NMD-likely",

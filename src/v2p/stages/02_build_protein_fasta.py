@@ -128,6 +128,17 @@ def main() -> int:
                          "affected transcript (recommended for MS search)")
     ap.add_argument("--no-construct-isoforms", action="store_true",
                     help="splicing: annotated-transcript matching only")
+    ap.add_argument("--fusion-orientation", choices=("both", "as-given"),
+                    default="both",
+                    help="fusions: 'both' (default) builds the chimera in "
+                         "each partner order, because many fusion tables "
+                         "do not order partners 5'->3'. 'as-given' trusts "
+                         "the table's own order, which Arriba, STAR-Fusion, "
+                         "JAFFA(L), CTAT-LR-fusion and FusionSeeker all "
+                         "report 5' partner first. Use it when the caller "
+                         "is known: the reversed chimera is a different "
+                         "protein that the sample does not contain, and it "
+                         "roughly doubles the fusion entries.")
     ap.add_argument("--uniprot", default="",
                     help="UniProt SwissProt FASTA; enables per-record "
                          "accession/description lookup and residue QC")
@@ -157,6 +168,7 @@ def main() -> int:
                   include_reference=args.include_reference,
                   keep_synonymous=args.keep_synonymous,
                   construct_isoforms=not args.no_construct_isoforms,
+                  fusion_orientation=args.fusion_orientation,
                   classes=args.classes or "ALL")
     rl.add_input("manifest", args.manifest)
     rl.add_input("genome", args.genome, checksum=False)
@@ -224,7 +236,9 @@ def main() -> int:
                     p["gene2"], p["chrom2"], p["pos2"], ann, genome,
                     source=row["source"], confidence=row["confidence"],
                     detection_type=p.get("detection_type", ""),
-                    validated=p.get("validated", ""), logger=rl.log)
+                    validated=p.get("validated", ""),
+                    try_both_orientations=args.fusion_orientation == "both",
+                    logger=rl.log)
             elif vclass.startswith("AS_"):
                 recs = build_splicing_proteins(
                     p["event_id"], p["event_type"], p["gene_id"], p["chrom"],

@@ -64,3 +64,12 @@ benchmarks/results/
 
 # pypgatk writes these into the working directory
 ensembl_translation-*.log
+
+# Third-party variant packages extracted into the tree, and the zipped
+# deliveries built from them. Neither is ours to redistribute, and both
+# are reconstructible: the package from its sender, the delivery from
+# scripts/prepare_union_dataset.py plus a v2p run config.
+/incoming/
+/out_example/
+*.zip
+/sample output file.fasta

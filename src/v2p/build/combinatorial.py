@@ -208,6 +208,37 @@ def _apply_all(tx_seq: str, placed: list) -> str | None:
     return seq
 
 
+def _sec_codons(t: Transcript, mut_cds_off: int, placed: list) -> set[int]:
+    """Sec codon indices of the combined transcript.
+
+    `Transcript.sec_codon_indices` shifts for one variant; here several
+    placements shift a site together, so their length changes accumulate.
+    A placement overlapping the Sec codon drops the site: the codon being
+    read is no longer the annotated one.
+    """
+    if not t.sec_sites:
+        return set()
+    out: set[int] = set()
+    for g in t.sec_sites:
+        tx = t.genomic_to_tx(g)
+        if tx is None:
+            continue
+        shift = 0
+        disrupted = False
+        for start, ln, allele in placed:
+            if start + ln <= tx:
+                shift += len(allele) - ln
+            elif start < tx + 3:
+                disrupted = True
+                break
+        if disrupted:
+            continue
+        rel = tx + shift - mut_cds_off
+        if rel >= 0 and rel % 3 == 0:
+            out.add(rel // 3)
+    return out
+
+
 def _translate(tx_seq: str, placed: list, cds_off: int, t: Transcript):
     """Apply `placed` to the transcript and translate. None if refused."""
     mut = _apply_all(tx_seq, placed)
@@ -215,7 +246,12 @@ def _translate(tx_seq: str, placed: list, cds_off: int, t: Transcript):
         return None
     # A 5'UTR indel moves the start codon, as in the single-variant path.
     delta = sum(len(a) - ln for s, ln, a in placed if s < cds_off)
-    tr = translate_orf(mut[cds_off + delta:], table_for_contig(t.chrom))
+    mut_cds_off = cds_off + delta
+    # With the Sec annotation, as the single-variant path and
+    # `ref_protein` both do; without it the two are compared on unequal
+    # terms and every selenoprotein combination reads as a truncation.
+    tr = translate_orf(mut[mut_cds_off:], table_for_contig(t.chrom),
+                       sec_codons=_sec_codons(t, mut_cds_off, placed))
     return tr.protein or None
 
 

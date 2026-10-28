@@ -58,24 +58,25 @@ def event_junctions(event_type: str,
             e1, s2 = g[0]
             e2, s3 = g[1]
             return {"form1": [(e1, s2), (e2, s3)], "form2": [(e1, s3)]}
-        if event_type == "A5" and len(g) == 2:
-            e1, s3 = g[0]
-            e2, _ = g[1]
-            return {"form1": [(e1, s3)], "form2": [(e2, s3)]}
-        if event_type == "A3" and len(g) == 2:
-            e1, s2 = g[0]
-            _, s3 = g[1]
-            return {"form1": [(e1, s2)], "form2": [(e1, s3)]}
+        if event_type in ("A3", "A5") and len(g) == 2:
+            # Each group is one of the two junctions. Which position holds
+            # the shared coordinate flips with the strand, so they are not
+            # unpacked positionally.
+            if len(g[0]) != 2 or len(g[1]) != 2:
+                return None
+            return {"form1": [(min(g[0]), max(g[0]))],
+                    "form2": [(min(g[1]), max(g[1]))]}
         if event_type == "RI" and len(g) == 3:
             e1, s2 = g[1]
             return {"form1": [], "form2": [(e1, s2)]}
         if event_type == "MX" and len(g) == 4:
-            e1, s2 = g[0]
-            e2, s4 = g[1]
-            _, s3 = g[2]
-            e3, _ = g[3]
-            return {"form1": [(e1, s2), (e2, s4)],
-                    "form2": [(e1, s3), (e3, s4)]}
+            # Groups 1-2 flank the first exon, 3-4 the second. Each form
+            # is read from its own groups; reassembling form2 out of
+            # form1's parts holds for most ids but not all.
+            if any(len(x) != 2 for x in g):
+                return None
+            js = [(min(x), max(x)) for x in g]
+            return {"form1": [js[0], js[1]], "form2": [js[2], js[3]]}
         if event_type in ("AF", "AL") and len(g) == 4:
             # SUPPA2 emits AF/AL coordinate groups in opposite order on the
             # two strands: [single, pair, single, pair] one way and
@@ -137,23 +138,30 @@ def _construct_exons(event_type: str, groups: list[list[int]],
         new = [b for b in ex if b[1] < s1 or b[0] > e2]
         new.append((s1, e2))                      # intron retained
         return sorted(set(new), key=lambda x: x[0])
-    if event_type == "A3" and len(g) == 2:
-        e1, s2 = g[0]
-        _, s3 = g[1]
+    if event_type in ("A3", "A5") and len(g) == 2:
+        if len(g[0]) != 2 or len(g[1]) != 2:
+            return None
+        # The shared coordinate is the fixed side of the event and the
+        # other two are the alternatives. Found by comparing the pairs,
+        # then matched against the template's exon boundaries to settle
+        # whether the event moves an exon start or an exon end - neither
+        # step needs the strand.
+        shared = set(g[0]) & set(g[1])
+        alts = sorted(set(g[0]) ^ set(g[1]))
+        if len(shared) != 1 or len(alts) != 2:
+            return None
+        starts = {s for s, _ in ex}
+        ends = {e for _, e in ex}
+        moves_start = bool(set(alts) & starts)
+        moves_end = bool(set(alts) & ends)
+        if moves_start == moves_end:
+            return None          # ambiguous or matches nothing: refuse
         new = []
         for s, e in ex:
-            if s in (s2, s3):
-                new.append((min(s2, s3), e))      # use the distal acceptor
-            else:
-                new.append((s, e))
-        return sorted(set(new), key=lambda x: x[0])
-    if event_type == "A5" and len(g) == 2:
-        e1, _ = g[0]
-        e2, _ = g[1]
-        new = []
-        for s, e in ex:
-            if e in (e1, e2):
-                new.append((s, max(e1, e2)))      # use the distal donor
+            if moves_start and s in alts:
+                new.append((min(alts), e))   # distal acceptor/donor: longer exon
+            elif moves_end and e in alts:
+                new.append((s, max(alts)))
             else:
                 new.append((s, e))
         return sorted(set(new), key=lambda x: x[0])

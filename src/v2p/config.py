@@ -112,6 +112,12 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
         # Combining changes what is in the database, so a config that
         # omitted these would reproduce a different release from the run
         # that wrote it.
+        # Changes which sequences are in the release, so it has to be in
+        # the config for a run to be reproducible from it.
+        Key("fusion_orientation", "fusion_orientation", "str", "both",
+            ("both", "as-given"),
+            comment="both = build each partner order; as-given = trust the "
+                    "fusion table's own 5'->3' order"),
         Key("combine_variants", "combine_variants", "bool", False,
             comment="emit proteins carrying all co-occurring variants"),
         Key("combine_max", "combine_max", "int", 8,

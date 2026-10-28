@@ -219,6 +219,7 @@ Detection can be bypassed per evidence type:
 | `--header-style uniprot\|peff\|pvac\|descriptive` | re-emit without re-translating |
 | `--decoys none\|reverse\|pseudo_reverse\|shuffle` | target-decoy strategy |
 | `--transcript-mode all\|representative` | every transcript, or one per gene |
+| `--fusion-orientation both\|as-given` | build the chimera in each partner order, or trust the table's own 5'->3' order |
 | `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |
 | `--combine-variants` | emit proteins carrying all co-occurring variants on a haplotype |
 | `--combine-max <n>` | most variants combined on one transcript, default 8 |
@@ -242,6 +243,7 @@ Detection can be bypassed per evidence type:
 | flag | why |
 |---|---|
 | `--transcript-mode representative` | one transcript per gene instead of all. Much smaller database. |
+| `--fusion-orientation as-given` | trust the fusion table's partner order. Arriba, STAR-Fusion, JAFFA, JAFFAL, CTAT-LR-fusion and FusionSeeker all name the 5' partner first; for those, building both orders adds a chimera the sample does not contain. |
 | `--header-style peff \| uniprot \| pvac \| descriptive` | re-emit in another convention without re-translating |
 | `--decoys none` | if your search engine generates its own |
 | `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |

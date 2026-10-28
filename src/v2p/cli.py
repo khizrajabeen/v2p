@@ -280,6 +280,7 @@ def cmd_run(args: argparse.Namespace) -> int:
          "--uniprot", sel[PROTEOME],
          "--header-style", args.header_style,
          "--transcript-mode", args.transcript_mode,
+         "--fusion-orientation", args.fusion_orientation,
          "--include-reference",
          "--species", args.species,
          *(["--include-noncanonical"] if args.include_noncanonical else []),
@@ -320,8 +321,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         _run("04_validate_uniprot.py", v, quiet=True, logdir=args.logdir)
     except subprocess.CalledProcessError:
-        print("  ! validation below threshold - see "
-              f"{work}/qc/uniprot_validation.md", file=sys.stderr)
+        # The stage exits non-zero both when the gate is not met and when
+        # it fails before it can judge. Only the first says anything
+        # about the data, and the report is what tells them apart.
+        report = work / "qc" / "uniprot_validation.md"
+        if report.exists():
+            print(f"  ! validation below threshold - see {report}",
+                  file=sys.stderr)
+        else:
+            print("  ! validation stage failed before reporting; see the "
+                  f"stage log in {args.logdir}", file=sys.stderr)
         if not args.force:
             return 1
     _run("08_recovery_report.py",
@@ -450,6 +459,15 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--fusion-orientation", default="both",
+      choices=["both", "as-given"],
+      help="which partner order a chimeric transcript is built in. "
+           "'both' (default) builds each order, because many fusion "
+           "tables do not list the 5' partner first. 'as-given' trusts "
+           "the table: Arriba, STAR-Fusion, JAFFA, JAFFAL, "
+           "CTAT-LR-fusion and FusionSeeker all report the 5' partner "
+           "first, and for those the reversed chimera is a protein the "
+           "sample does not contain.")
     A("--combine-variants", action="store_true",
       help="also emit one protein per haplotype carrying two or more "
            "co-occurring variants. A tryptic peptide spanning two variants "

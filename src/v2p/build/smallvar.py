@@ -242,7 +242,10 @@ def build_small_variant_proteins(
         # which UGA codons are selenocysteine rather than stop.
         codon_table = table_for_contig(t.chrom)
         ref_sec = t.sec_codon_indices(cds_off)
-        alt_sec = t.sec_codon_indices(cds_off, variant_tx_offset=tx_start,
+        # Counted from where the mutant CDS starts, which a 5'UTR indel
+        # moves; against the unshifted start a frame-shifting one puts
+        # every Sec codon off a codon boundary and drops it.
+        alt_sec = t.sec_codon_indices(mut_cds_off, variant_tx_offset=tx_start,
                                       length_delta=delta)
         ref_tr: Translation = translate_orf(tx_seq[cds_off:], codon_table,
                                             sec_codons=ref_sec)

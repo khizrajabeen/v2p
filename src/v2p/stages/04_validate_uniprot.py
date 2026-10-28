@@ -166,9 +166,16 @@ def main() -> int:
                 "uniprot_length": rc.uniprot_length,
                 "status": rc.status,
             })
+        # An empty recoding table is legitimate: editing calls need not
+        # carry per-transcript protein annotation, and a sample need not
+        # have a recoding site. Reading the field names off detail[0]
+        # made that an IndexError.
+        fields = ["locus", "gene", "transcript", "protein_change",
+                  "annotated_ref_aa", "uniprot_aa", "uniprot_accession",
+                  "uniprot_length", "status"]
         with open(out / "tables" / "uniprot_residue_check.tsv", "w",
                   newline="", encoding="utf-8") as fh:
-            w = csv.DictWriter(fh, fieldnames=list(detail[0]), delimiter="\t")
+            w = csv.DictWriter(fh, fieldnames=fields, delimiter="\t")
             w.writeheader()
             w.writerows(detail)
 
