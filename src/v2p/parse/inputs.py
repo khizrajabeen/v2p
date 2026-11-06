@@ -322,14 +322,41 @@ def parse_suppa_event_id(event: str) -> dict[str, Any] | None:
             "strand": strand, "coord_groups": groups}
 
 
+def _event_column(row: dict[str, str]) -> str | None:
+    """The column holding SUPPA2 event ids, found by its grammar.
+
+    `AS` is what this pipeline's own examples call it, but discover.py
+    identifies a splicing file by looking for the event grammar in any of
+    the first columns and reports whichever name it found. Reading only
+    `AS` here meant a file detected as splicing - correctly, under
+    another column name - then parsed to zero events, which looks like an
+    empty input rather than a mismatch.
+    """
+    if row.get("AS") and parse_suppa_event_id(row["AS"]):
+        return "AS"
+    for key, value in row.items():
+        if value and parse_suppa_event_id(value):
+            return key
+    return None
+
+
 def parse_as_events(path: str | Path, logger=None) -> Iterator[dict[str, Any]]:
     n_in = n_out = n_bad = 0
+    col: str | None = None
     with _open_text(path) as fh:
         rdr = csv.DictReader(fh)
         for row in rdr:
             n_in += 1
             row = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
-            ev = row.get("AS", "")
+            if col is None:
+                col = _event_column(row)
+                if col is None:
+                    n_bad += 1
+                    continue
+                if col != "AS" and logger:
+                    logger.info("AS events %s: reading event ids from "
+                                "column %r", Path(path).name, col)
+            ev = row.get(col, "")
             parsed = parse_suppa_event_id(ev)
             if parsed is None:
                 n_bad += 1

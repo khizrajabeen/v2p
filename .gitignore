@@ -73,3 +73,9 @@ ensembl_translation-*.log
 /out_example/
 *.zip
 /sample output file.fasta
+
+# Generated AS event catalogue. The .gz is tracked - it takes ~7 minutes
+# to rebuild and every later step keys off it - while the uncompressed
+# copy the scripts actually read is not.
+events/*.tsv
+!events/*.tsv.gz

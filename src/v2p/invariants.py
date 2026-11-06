@@ -486,6 +486,8 @@ def check_i5_layout(rel: Release, proteome: Path | None) -> list[Violation]:
 
 
 _B1 = re.compile(r"^##\s+B1\..*$", re.MULTILINE)
+# The validation stage's own wording when it had nothing to compare.
+_NOTHING_COMPARED = re.compile(r"[Nn]o transcripts could be compared")
 _AGREE = re.compile(r"Exact-agreement:\s*\*\*([0-9.]+)%\*\*")
 
 
@@ -511,8 +513,19 @@ def check_i6_agreement(rel: Release, min_agreement: float) -> list[Violation]:
 
     hit = _AGREE.search(section)
     if not hit:
-        # The section exists, so the check was attempted. Failing to read its
-        # result must not be indistinguishable from passing it.
+        # Three ways to reach this point, and they are not the same thing.
+        # The stage says so itself when it had nothing to work with: a
+        # release whose entries are all annotated isoforms carries no
+        # reference transcript for the stage to re-translate, which is a
+        # property of the input, not a format change. Reporting it as
+        # drift sends the reader to look for a bug in the reporting code.
+        if _NOTHING_COMPARED.search(section):
+            return [_v("I6", WARNING,
+                       f"{_NOT_EVALUATED}: the translation check had no "
+                       f"reference transcript to compare, so this release "
+                       f"carries no evidence either way")]
+        # The section exists and claims a result this cannot read. Failing
+        # to read it must not be indistinguishable from passing it.
         return [_v("I6", ERROR,
                    f"the translation check ran but its agreement rate could "
                    f"not be read from {rel.validation_md.name}; the report "

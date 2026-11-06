@@ -211,16 +211,38 @@ def main() -> int:
     if args.protein_fasta:
         rl.add_input("protein_fasta", args.protein_fasta)
         refs: dict[str, tuple[str, str]] = {}   # tx -> (gene, sequence)
+        n_ref_class = n_isoform = 0
         for hdr, seq in read_fasta(Path(args.protein_fasta)):
             kv = parse_kv(hdr)
             vt = kv.get("VT") or kv.get("VariantType", "")
-            if "REFERENCE" not in (vt + hdr):
+            csq = kv.get("CSQ", "")
+            is_ref = "REFERENCE" in (vt + hdr)
+            # An entry the splicing path matched to an annotated transcript
+            # is that transcript translated unedited, so GENCODE's own
+            # translation of the same id is just as valid a comparison as
+            # for a REFERENCE entry. Taking only REFERENCE entries left a
+            # release made entirely of annotated isoforms - every
+            # splicing-only run - with nothing to check and no evidence
+            # either way, while the sequences to check were right there.
+            # Constructed isoforms are excluded: they are built by editing
+            # an exon chain, so GENCODE has no translation of them.
+            is_isoform = csq.endswith("_annotated_isoform")
+            if not (is_ref or is_isoform):
                 continue
             gene = kv.get("GN") or kv.get("GName", "")
             tx = kv.get("TX") or kv.get("TranscriptId", "")
             if gene and seq:
-                refs[tx or f"nolabel:{gene}:{len(refs)}"] = (gene, seq)
-        rl.log.info("%d reference proteins recovered from the FASTA", len(refs))
+                key = tx or f"nolabel:{gene}:{len(refs)}"
+                if key in refs:
+                    continue
+                refs[key] = (gene, seq)
+                if is_ref:
+                    n_ref_class += 1
+                else:
+                    n_isoform += 1
+        rl.log.info("%d transcripts to check: %d REFERENCE entries, "
+                    "%d annotated-isoform entries", len(refs), n_ref_class,
+                    n_isoform)
 
         # ---- B1: against GENCODE's own translations (authoritative) ----
         gencode_rate = None

@@ -280,7 +280,9 @@ def cmd_run(args: argparse.Namespace) -> int:
          "--uniprot", sel[PROTEOME],
          "--header-style", args.header_style,
          "--transcript-mode", args.transcript_mode,
+         "--name", args.name,
          "--fusion-orientation", args.fusion_orientation,
+         *([] if args.construct_isoforms else ["--no-construct-isoforms"]),
          "--include-reference",
          "--species", args.species,
          *(["--include-noncanonical"] if args.include_noncanonical else []),
@@ -459,6 +461,14 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--no-construct-isoforms", dest="construct_isoforms",
+      action="store_false",
+      help="splicing: keep only events that match an annotated "
+           "transcript, instead of editing the representative "
+           "transcript's exon chain to realise an event nothing in the "
+           "annotation carries. Constructed isoforms are the right "
+           "answer for a tumour-specific event and the wrong one for a "
+           "catalogue of what normal tissue already expresses.")
     A("--fusion-orientation", default="both",
       choices=["both", "as-given"],
       help="which partner order a chimeric transcript is built in. "

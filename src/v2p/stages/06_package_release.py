@@ -213,6 +213,14 @@ def main() -> int:
     peptide_rows = []
     kept: list[tuple[str, str]] = []
     stats = Counter()
+    # Distinct peptides this release adds on top of the reference. Database
+    # size is what a variant database costs: every added peptide raises the
+    # score threshold at a fixed FDR, so the figure that matters is not how
+    # many sequences were emitted but how far the searchable peptide space
+    # grew. Only novel peptides are accumulated - the rest are already in
+    # the reference and cost nothing.
+    added_peptides: set[str] = set()
+    added_by_class: dict[str, set[str]] = {}
     for seq, hits in by_seq.items():
         classes = [h[1].get("VT", "?") for h in hits]
         primary = min(classes,
@@ -233,6 +241,19 @@ def main() -> int:
         if args.drop_nmd and nmd_flag == "likely":
             stats["dropped_nmd"] += 1
             continue
+
+        # I/L equated, as novel_peptides does: isobaric peptides are one
+        # entry in the search space, not two.
+        keys = {p.replace("I", "L") for p in nov}
+        added_peptides |= keys
+        # Counted against every class that reaches this sequence, not only
+        # the one dedup kept. A protein reachable through four event types
+        # is filed under the highest-priority one, so counting primaries
+        # alone reported classes that contributed six figures of proteins
+        # as contributing nothing. The totals still add up because the
+        # release-wide figure is a union, not a sum of these.
+        for c in set(classes):
+            added_by_class.setdefault(c, set()).update(keys)
         if args.drop_non_novel and not nov and primary != "REFERENCE":
             stats["dropped_no_novel_peptide"] += 1
             continue
@@ -444,6 +465,32 @@ def main() -> int:
             w.writeheader()
             w.writerows(rows)
     rl.add_output("entry_table", table)
+
+    # What the database costs to search. Reported next to the entry counts
+    # because the two can move in opposite directions: thousands of extra
+    # sequences that duplicate reference peptides cost nothing, while a
+    # handful of frameshifts can add a great many searchable peptides.
+    cost = out / f"{args.name}.search_space.tsv"
+    n_ref = len(ref_space)
+    with open(cost, "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["scope", "distinct_peptides_added", "pct_over_reference"])
+        # Per-class rows count every class that reaches a sequence, so they
+        # overlap and do not sum to release_total.
+        w.writerow(["reference_proteome", n_ref, ""])
+        w.writerow(["release_total", len(added_peptides),
+                    f"{len(added_peptides) / n_ref * 100:.2f}" if n_ref else ""])
+        for c in sorted(added_by_class,
+                        key=lambda x: (CLASS_PRIORITY.index(x)
+                                       if x in CLASS_PRIORITY else 99)):
+            w.writerow([c, len(added_by_class[c]),
+                        f"{len(added_by_class[c]) / n_ref * 100:.2f}"
+                        if n_ref else ""])
+    rl.add_output("search_space", cost)
+    rl.count("peptides_added", len(added_peptides))
+    rl.log.info("search space: %d reference peptides, %d added by this "
+                "release (%.2f%%)", n_ref, len(added_peptides),
+                len(added_peptides) / n_ref * 100 if n_ref else 0.0)
 
     # per-class summary, so the composition is legible without a spreadsheet
     summ = out / f"{args.name}.summary_by_class.tsv"

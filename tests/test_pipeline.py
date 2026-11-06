@@ -25,7 +25,7 @@ from v2p.build.splicing import (                           # noqa: E402
 )
 from v2p.fasta import HEADER_STYLES, write_fasta           # noqa: E402
 from v2p.parse.inputs import (                             # noqa: E402
-    parse_aachange, parse_suppa_event_id,
+    parse_aachange, parse_as_events, parse_suppa_event_id,
 )
 from v2p.seqops import (                                   # noqa: E402
     hgvs_p_to_change, revcomp, translate_orf,
@@ -355,6 +355,46 @@ def main() -> int:
     # Alternatives matching no boundary of the template are refused.
     check("A3/A5 construction refuses coordinates off the template",
           _construct_exons("A3", [[700, 800], [750, 800]], tx_a) is None)
+
+    # discover.py accepts the event grammar in any column and reports the
+    # name it found; the parser used to read only "AS", so a file
+    # detected as splicing under another name parsed to zero events.
+    import tempfile
+    _ev = "ENSG00000000003.15;A5:chrX:100635746-100636191:100635746-100636608:-"
+    _dir = tempfile.mkdtemp()
+    for _col in ("AS", "event_id", "anything_else"):
+        _p = Path(_dir) / f"{_col}.csv"
+        _p.write_text(f"{_col},support\n{_ev},7\n", encoding="utf-8")
+        check(f"AS events parse from a column named {_col!r}",
+              len(list(parse_as_events(_p))) == 1)
+    _p = Path(_dir) / "none.csv"
+    _p.write_text("a,b\n1,2\n", encoding="utf-8")
+    check("a file with no event column yields nothing, without raising",
+          list(parse_as_events(_p)) == [])
+
+    # A source stating no confidence becomes float nan, whose str() is
+    # "nan" and is truthy, so CONF=nan was written into headers for
+    # inputs that had said nothing at all.
+    from v2p.build.smallvar import ProteinRecord as _PR
+    from v2p.fasta import _confidence as _conf
+    for _v in ("", "nan", "NA", "none", "."):
+        check(f"confidence {_v!r} is treated as absent",
+              _conf(_PR(seq_id="x", sequence="M", variant_class="SNV",
+                        consequence="missense", gene="G", transcript="T",
+                        confidence=_v)) == "")
+    check("a real confidence survives",
+          _conf(_PR(seq_id="x", sequence="M", variant_class="SNV",
+                    consequence="missense", gene="G", transcript="T",
+                    confidence="0.97")) == "0.97")
+
+    # The release name prefixes every variant accession. It defaulted to
+    # the sample this pipeline was written for, so a database built from
+    # any other sample still announced itself as that one.
+    _rec = _PR(seq_id="G_T_chr1_1_A_C", sequence="MK", variant_class="SNV",
+               consequence="missense", gene="G", transcript="T")
+    _hdr = HEADER_STYLES["uniprot"](_rec, "MYSAMPLE")
+    check("the uniprot accession carries the release name",
+          "|MYSAMPLE_" in _hdr and "HCC1395" not in _hdr, _hdr[:80])
 
     # ------------------------------------------------------- FASTA emission
     recs = build_small_variant_proteins("chrT1", p, "A", "C", ann, gen,

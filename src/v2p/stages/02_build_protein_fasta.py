@@ -128,6 +128,10 @@ def main() -> int:
                          "affected transcript (recommended for MS search)")
     ap.add_argument("--no-construct-isoforms", action="store_true",
                     help="splicing: annotated-transcript matching only")
+    ap.add_argument("--name", default="HCC1395",
+                    help="release name. It prefixes every variant "
+                         "accession, so a database built from another "
+                         "sample does not carry this one's name.")
     ap.add_argument("--fusion-orientation", choices=("both", "as-given"),
                     default="both",
                     help="fusions: 'both' (default) builds the chimera in "
@@ -486,6 +490,8 @@ def main() -> int:
         records.extend(nc_all)
 
     counts = write_fasta(records, fasta_path, style=args.header_style,
+                         prefix=args.name, db_name=f"{args.name}_proteome",
+                         description=f"{args.name} variant protein database",
                          logger=rl.log, species=species)
     write_record_table(records, table_path)
     for k, v in counts.items():

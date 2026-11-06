@@ -57,6 +57,18 @@ def wrap(seq: str, width: int = 60) -> str:
 # header formatters
 # --------------------------------------------------------------------------
 
+# A source that states no confidence yields a float nan on the way through
+# the parsers, and str(nan) is "nan", which is truthy. Writing CONF=nan into
+# a header claims a value where the input had none, so non-numeric and
+# missing values are dropped instead.
+_NO_CONF = {"", "nan", "none", "na", "n/a", "."}
+
+
+def _confidence(r: ProteinRecord) -> str:
+    v = str(r.confidence).strip()
+    return "" if v.lower() in _NO_CONF else v
+
+
 def header_descriptive(r: ProteinRecord, prefix: str,
                        species: Species = HUMAN) -> str:
     """Pipe-delimited, self-documenting. Safe default."""
@@ -69,7 +81,7 @@ def header_descriptive(r: ProteinRecord, prefix: str,
         f"PC={r.protein_change or 'NA'}",
         f"LOC={r.locus or 'NA'}",
         f"SRC={r.source or 'NA'}",
-        f"CONF={r.confidence or 'NA'}",
+        f"CONF={_confidence(r) or 'NA'}",
         f"LEN={len(r.sequence)}",
     ]
     if r.variant_pos_aa:
@@ -193,8 +205,8 @@ def header_uniprot(r: ProteinRecord, prefix: str,
         head += f" NOVEL={r.novel_span[0]}-{r.novel_span[1]}"
     if r.source:
         head += f" SRC={r.source}"
-    if r.confidence:
-        head += f" CONF={r.confidence}"
+    if _confidence(r):
+        head += f" CONF={_confidence(r)}"
     if r.extra.get("uniprot_check"):
         head += f" QC={r.extra['uniprot_check']}"
     if r.extra.get("nmd") and r.extra["nmd"] != "not_applicable":

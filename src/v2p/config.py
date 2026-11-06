@@ -114,6 +114,9 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
         # that wrote it.
         # Changes which sequences are in the release, so it has to be in
         # the config for a run to be reproducible from it.
+        Key("construct_isoforms", "construct_isoforms", "bool", True,
+            comment="build an isoform for a splicing event no annotated "
+                    "transcript carries"),
         Key("fusion_orientation", "fusion_orientation", "str", "both",
             ("both", "as-given"),
             comment="both = build each partner order; as-given = trust the "
