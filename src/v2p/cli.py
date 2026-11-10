@@ -283,6 +283,11 @@ def cmd_run(args: argparse.Namespace) -> int:
          "--name", args.name,
          "--fusion-orientation", args.fusion_orientation,
          *([] if args.construct_isoforms else ["--no-construct-isoforms"]),
+         *(["--include-sec-termination"] if args.include_sec_termination
+           else []),
+         *(["--expression", args.expression,
+            "--min-expression", str(args.min_expression)]
+           if args.expression else []),
          "--include-reference",
          "--species", args.species,
          *(["--include-noncanonical"] if args.include_noncanonical else []),
@@ -463,6 +468,18 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--expression", default="", metavar="FILE",
+      help="per-gene expression for this sample, CSV or TSV. A variant "
+           "in a gene the sample does not transcribe cannot make a "
+           "protein in it, so its entries are dropped and the reason "
+           "recorded. Column names are detected; --min-expression sets "
+           "the floor in the table's own units.")
+    A("--min-expression", type=float, default=0.0)
+    A("--include-sec-termination", action="store_true",
+      help="also emit each selenoprotein terminated at its "
+           "selenocysteine codon. Both readings happen in the same "
+           "cell and v2p emits only the read-through one otherwise. "
+           "~25 genes, so the database barely grows.")
     A("--normal-peptides", default=None, metavar="FILE",
       help="peptides healthy tissue is known to make that the reference "
            "proteome omits. A peptide missing from the reference is not "

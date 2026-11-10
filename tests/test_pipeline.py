@@ -545,6 +545,52 @@ def main() -> int:
           _combo_sec(t_sec, sec_cds_off, [(sec_tx, 1, "C")]) == set(),
           str(_combo_sec(t_sec, sec_cds_off, [(sec_tx, 1, "C")])))
 
+    # A UGA in a selenoprotein is read as Sec when the machinery is
+    # engaged and as a stop when it is not, and both happen in the same
+    # cell. v2p emits the read-through form; this is the other one.
+    from v2p.build.alt_translation import build_sec_termination_proteins
+    # min_aa lowered: the fixture puts Sec at residue 6, so the
+    # terminated form is 5 residues and the default floor drops it.
+    _sect = build_sec_termination_proteins([t_sec], gen, min_aa=4)
+    check("a selenoprotein yields a terminated proteoform",
+          len(_sect) == 1, str(len(_sect)))
+    _s = _sect[0]
+    check("the terminated form stops before the Sec residue",
+          _s.sequence == m_sec["protein"].split("U")[0],
+          f"{_s.sequence} vs {m_sec['protein']}")
+    check("the terminated form is a prefix of the read-through one",
+          m_sec["protein"].startswith(_s.sequence))
+    check("it records the length it would have reached",
+          _s.extra["readthrough_length"] == len(m_sec["protein"]))
+    # A variant in a gene the sample does not transcribe cannot make a
+    # protein in it. The table is the caller's own quantification, so the
+    # columns are found by name and the version suffix is matched loosely.
+    from v2p.peptides import load_expression as _lx
+    _ed = Path(tempfile.mkdtemp())
+    (_ed / "e.tsv").write_text(
+        "gene_id\tTPM\nENSG0001.5\t12.5\nENSG0002.1\t0.0\nENSG0003.2\tNA\n",
+        encoding="utf-8")
+    _keep = _lx(_ed / "e.tsv", min_value=1.0)
+    check("an expressed gene is kept, with and without its version",
+          "ENSG0001.5" in _keep and "ENSG0001" in _keep, str(sorted(_keep)))
+    check("a gene below the floor is dropped", "ENSG0002.1" not in _keep)
+    check("an unparseable value is dropped, not treated as zero",
+          "ENSG0003.2" not in _keep)
+    (_ed / "c.csv").write_text("gene,tpm\nA,5\nB,0.1\n", encoding="utf-8")
+    check("a comma-delimited table with other column names is read",
+          _lx(_ed / "c.csv", min_value=1.0) == {"A"},
+          str(_lx(_ed / "c.csv", min_value=1.0)))
+    try:
+        (_ed / "bad.tsv").write_text("x\ty\n1\t2\n", encoding="utf-8")
+        _lx(_ed / "bad.tsv")
+        check("a table with no recognisable columns is refused", False)
+    except ValueError:
+        check("a table with no recognisable columns is refused", True)
+
+    check("a transcript with no Sec site yields nothing",
+          build_sec_termination_proteins(
+              [ann.representative("GPLUS")], gen, min_aa=4) == [])
+
     t_mito = ann.representative("GMITO")
     check("chrM selects the vertebrate mitochondrial code",
           table_for_contig(t_mito.chrom) is CODON_TABLE_MITO)

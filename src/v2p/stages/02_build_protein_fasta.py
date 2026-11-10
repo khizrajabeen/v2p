@@ -32,6 +32,10 @@ from v2p.build.splicing import build_splicing_proteins   # noqa: E402
 from v2p.build.combinatorial import (
     CombinableVariant, build_combinatorial_proteins,
 )
+from v2p.peptides import load_expression                # noqa: E402
+from v2p.build.alt_translation import (                 # noqa: E402
+    build_sec_termination_proteins,
+)
 from v2p.build.noncanonical import (
     build_noncanonical_proteins, build_utr_orfs, drop_known_proteins,
 )
@@ -109,6 +113,26 @@ def main() -> int:
                          "transcripts (lncRNA, pseudogene). OFF by "
                          "default: it multiplies database size and an "
                          "inflated search space costs sensitivity.")
+    ap.add_argument("--expression", default="",
+                    help="CSV/TSV of per-gene expression for this sample. "
+                         "Entries whose gene is below --min-expression are "
+                         "dropped, with the reason recorded: a variant in "
+                         "a gene the sample does not transcribe cannot "
+                         "make a protein in it, and its entries are search "
+                         "space and nothing else.")
+    ap.add_argument("--min-expression", type=float, default=0.0,
+                    help="expression floor, in the table's own units "
+                         "(default 0, which keeps any gene the table "
+                         "lists at all)")
+    ap.add_argument("--expression-gene-column", default="")
+    ap.add_argument("--expression-value-column", default="")
+    ap.add_argument("--include-sec-termination", action="store_true",
+                    help="also emit, for each selenoprotein, the form "
+                         "terminated at its selenocysteine codon. A UGA "
+                         "in a selenoprotein is read as Sec when the "
+                         "machinery is engaged and as a stop when it is "
+                         "not, and both happen in the same cell; v2p "
+                         "emits only the read-through form otherwise.")
     ap.add_argument("--nc-min-aa", type=int, default=30,
                     help="minimum ORF length in residues (default 30)")
     ap.add_argument("--nc-any-start", action="store_true",
@@ -177,6 +201,16 @@ def main() -> int:
     rl.add_input("manifest", args.manifest)
     rl.add_input("genome", args.genome, checksum=False)
     rl.add_input("gtf", args.gtf)
+
+    expressed = None
+    if args.expression:
+        rl.add_input("expression", args.expression)
+        expressed = load_expression(
+            args.expression, args.expression_gene_column,
+            args.expression_value_column, args.min_expression)
+        rl.log.info("expression table: %d gene(s) at or above %g",
+                    len(expressed), args.min_expression)
+        rl.count("expressed_genes", len(expressed))
 
     rl.log.info("loading annotation ...")
     # Non-coding transcripts are dropped at load time unless the
@@ -270,8 +304,19 @@ def main() -> int:
         n_kept_here = 0
         n_syn_here = 0
         n_short_here = 0
+        n_unexpressed_here = 0
         syn_kinds: set[str] = set()
         for r in recs:
+            # A variant in a gene this sample does not transcribe cannot
+            # make a protein in it. Dropped here, where the reason is
+            # recorded, rather than left to inflate the search space.
+            if expressed is not None and r.gene and not (
+                    r.gene in expressed
+                    or r.gene.split(".")[0] in expressed):
+                rl.count("dropped.not_expressed")
+                rl.count(f"dropped.not_expressed.{vclass}")
+                n_unexpressed_here += 1
+                continue
             if len(r.sequence) < args.min_peptide:
                 rl.count("dropped.too_short")
                 rl.count(f"dropped.too_short.{vclass}")
@@ -462,6 +507,13 @@ def main() -> int:
                          100 * frac, 100 * args.max_combinatorial_fraction)
             return 2
         records.extend(combos)
+
+    if args.include_sec_termination:
+        rl.log.info('building selenocysteine-termination proteoforms ...')
+        sect = build_sec_termination_proteins(ann.tx.values(), genome,
+                                              logger=rl.log)
+        rl.count('sec_termination.records', len(sect))
+        records.extend(sect)
 
     if args.include_noncanonical:
         rl.log.info('three-frame translating non-coding transcripts ...')

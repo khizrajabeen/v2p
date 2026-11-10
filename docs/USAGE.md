@@ -250,6 +250,8 @@ Detection can be bypassed per evidence type:
 | `--drop-unchanged` | drop synonymous and UTR variants (kept by default) |
 | `--species mouse` | non-human. See `config/species/`. |
 | `--include-noncanonical` | three-frame translate lncRNAs and pseudogenes. **Read the warning.** |
+| `--include-sec-termination` | also emit each selenoprotein terminated at its Sec codon. A UGA there is read as selenocysteine when the machinery is engaged and as a stop when it is not, and both happen in the same cell. ~25 genes. |
+| `--expression <file>` + `--min-expression` | drop entries whose gene this sample does not transcribe. The reason is recorded in the disposition, so the variants are still accounted for. |
 | `--min-agreement 0.95` | raise the translation-agreement gate |
 | `--skip-invariant I5` | turn off one release check, recorded in the provenance JSON |
 

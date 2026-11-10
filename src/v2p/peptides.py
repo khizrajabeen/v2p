@@ -229,3 +229,54 @@ def candidate_funnel(pep_entries: dict, pep_meta: dict):
         rows.append({**m, "n_entries_sharing": n_sharing,
                      "peptide_length": len(m["peptide"])})
     return rows, counts
+
+
+def load_expression(path, gene_col: str = "", value_col: str = "",
+                    min_value: float = 0.0) -> set[str]:
+    """Genes expressed at or above `min_value`, from a CSV/TSV table.
+
+    A variant in a gene the sample does not transcribe cannot produce a
+    protein in that sample, so its entries are search space and nothing
+    else. The table is the caller's own quantification; the gene and
+    value columns are found by name when not given, so an RSEM, salmon
+    or featureCounts table can be passed unmodified.
+
+    Gene ids are matched with and without their version suffix, because
+    quantifiers and annotations disagree about it constantly.
+    """
+    import csv as _csv
+    import gzip as _gzip
+
+    opener = _gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8", errors="replace",
+                newline="") as fh:
+        sample = fh.read(8192)
+        fh.seek(0)
+        delim = "\t" if sample.count("\t") >= sample.count(",") else ","
+        rdr = _csv.DictReader(fh, delimiter=delim)
+        cols = [c.strip() for c in (rdr.fieldnames or [])]
+        gcol = gene_col or next(
+            (c for c in cols
+             if c.lower() in ("gene_id", "gene", "geneid", "name", "id")), "")
+        vcol = value_col or next(
+            (c for c in cols
+             if c.lower() in ("tpm", "fpkm", "expression", "value",
+                              "abundance", "counts", "count")), "")
+        if not gcol or not vcol:
+            raise ValueError(
+                f"cannot find gene and value columns in {path}; "
+                f"saw {cols[:8]} - name them with --expression-gene-column "
+                f"and --expression-value-column")
+        keep: set[str] = set()
+        for row in rdr:
+            try:
+                v = float((row.get(vcol) or "").strip() or "nan")
+            except ValueError:
+                continue
+            if v != v or v < min_value:        # NaN or below the floor
+                continue
+            g = (row.get(gcol) or "").strip()
+            if g:
+                keep.add(g)
+                keep.add(g.split(".")[0])
+    return keep

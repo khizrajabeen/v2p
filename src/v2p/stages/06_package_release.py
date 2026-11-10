@@ -55,11 +55,18 @@ from v2p.validate import UniProtDB                         # noqa: E402
 # Which class label wins when one sequence arises from several variants.
 CLASS_PRIORITY = ["FUSION", "INDEL", "SNV", "MNV", "RNA_EDITING",
                   "AS_SE", "AS_RI", "AS_MX", "AS_A3", "AS_A5",
-                  "AS_AF", "AS_AL", "REFERENCE"]
+                  "AS_AF", "AS_AL", "SEC_TERMINATION", "REFERENCE"]
 
 # Plain-language description of every file the split produces, so nobody
 # has to decode "AS_A3" from a filename.
 CLASS_DESC = {
+    "SEC_TERMINATION": (
+        "Selenoproteins terminated at their selenocysteine codon",
+        "A UGA in a selenoprotein is read as selenocysteine when the "
+        "machinery is engaged and as a stop when it is not. Both happen "
+        "in the same cell; this is the terminated form, whose final "
+        "tryptic peptide ends at the codon rather than reading through "
+        "it."),
     "SNV": ("Somatic single-nucleotide variants",
             "One amino-acid substitution, a premature stop, or a lost stop, "
             "from the high-confidence somatic SNV call set."),

@@ -114,6 +114,13 @@ SCHEMA: dict[str, tuple[Key, ...]] = {
         # that wrote it.
         # Changes which sequences are in the release, so it has to be in
         # the config for a run to be reproducible from it.
+        Key("expression", "expression", "path", None,
+            comment="per-gene expression table for this sample"),
+        Key("min_expression", "min_expression", "float", 0.0,
+            comment="drop entries whose gene is below this"),
+        Key("include_sec_termination", "include_sec_termination",
+            "bool", False,
+            comment="also emit selenoproteins terminated at their Sec codon"),
         Key("construct_isoforms", "construct_isoforms", "bool", True,
             comment="build an isoform for a splicing event no annotated "
                     "transcript carries"),
