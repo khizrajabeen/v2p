@@ -81,11 +81,14 @@ them. v2p overlaps that scope and does not claim to have got there first.
 
 What v2p does that those papers do not describe:
 
-- **Phase is a constraint, not a footnote.** Two heterozygous variants on
+- **Phase is a constraint, not a label.** Two heterozygous variants on
   opposite alleles sit on no single molecule, so that proteoform does not
   exist. v2p reads `GT`/`PS`, refuses those combinations, and marks the
   rest `unphased` so a hypothesis is never mistaken for an observation.
-  moPepGen's paper does not discuss phase or haplotypes.
+  moPepGen reads phase too — its VEP parser tests `'|' in gt` and writes
+  `PHASE_SETS` into its GVF — but in the source read here that attribute
+  is consulted in one place, which decides whether to declare it in the
+  output metadata, and not by the graph that enumerates combinations.
 - **Every input variant gets a recorded outcome**, including the ones
   producing nothing, so a recovery rate is measured rather than assumed.
 - **The release checks itself** — nine invariants, exiting non-zero on

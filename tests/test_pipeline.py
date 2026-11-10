@@ -562,6 +562,38 @@ def main() -> int:
           m_sec["protein"].startswith(_s.sequence))
     check("it records the length it would have reached",
           _s.extra["readthrough_length"] == len(m_sec["protein"]))
+    # circRNA. An ORF lying wholly inside the circularised exons is also
+    # in the gene's linear mRNA, so it is not evidence of circularisation
+    # and only junction-crossing ORFs count.
+    from v2p.build.circrna import _orfs_crossing, circular_sequence
+    from v2p.parse.inputs import parse_circ_id
+    from v2p.seqops import CODON_TABLE
+
+    # One turn is 30 nt. An ORF opening late in turn one must run into
+    # turn two, so it crosses; one opening at the very start does not.
+    _circ = "ATG" + "AAA" * 8 + "GGG"            # 30 nt, no stop
+    _rep = _circ * 3
+    _hits = _orfs_crossing(_rep, len(_circ), min_aa=12, require_atg=True,
+                           table=CODON_TABLE)
+    check("a junction-crossing ORF is found", len(_hits) >= 1, str(len(_hits)))
+    check("every reported ORF crosses at least once",
+          all(h[4] >= 1 for h in _hits), str([h[4] for h in _hits]))
+    _short = _orfs_crossing(_circ, len(_circ), min_aa=5, require_atg=True,
+                            table=CODON_TABLE)
+    check("a single turn has no junction to cross", _short == [],
+          str(_short))
+
+    check("a CIRI-style id parses", parse_circ_id("chr1:1000|2000")
+          == ("chr1", 1000, 2000))
+    check("a reversed id is normalised", parse_circ_id("chr1:2000|1000")
+          == ("chr1", 1000, 2000))
+    check("a non-id is refused", parse_circ_id("BRCA1") is None)
+
+    _cs, _ex = circular_sequence(t_plus, gen, t_plus.start, t_plus.end)
+    check("the circle is built from the host transcript's own exons",
+          len(_cs) == sum(e - s + 1 for s, e in _ex) and len(_ex) > 0,
+          f"{len(_cs)} nt over {len(_ex)} exons")
+
     # A variant in a gene the sample does not transcribe cannot make a
     # protein in it. The table is the caller's own quantification, so the
     # columns are found by name and the version suffix is matched loosely.

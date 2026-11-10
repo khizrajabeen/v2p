@@ -33,6 +33,7 @@ from v2p.build.combinatorial import (
     CombinableVariant, build_combinatorial_proteins,
 )
 from v2p.peptides import load_expression                # noqa: E402
+from v2p.build.circrna import build_circrna_proteins  # noqa: E402
 from v2p.build.alt_translation import (                 # noqa: E402
     build_sec_termination_proteins,
 )
@@ -126,6 +127,12 @@ def main() -> int:
                          "lists at all)")
     ap.add_argument("--expression-gene-column", default="")
     ap.add_argument("--expression-value-column", default="")
+    ap.add_argument("--circ-min-aa", type=int, default=30,
+                    help="minimum circRNA ORF length in residues "
+                         "(default 30)")
+    ap.add_argument("--circ-max-cycles", type=int, default=3,
+                    help="how many turns of the circle to translate "
+                         "before giving up on finding a stop (default 3)")
     ap.add_argument("--include-sec-termination", action="store_true",
                     help="also emit, for each selenoprotein, the form "
                          "terminated at its selenocysteine codon. A UGA "
@@ -276,6 +283,13 @@ def main() -> int:
                     detection_type=p.get("detection_type", ""),
                     validated=p.get("validated", ""),
                     try_both_orientations=args.fusion_orientation == "both",
+                    logger=rl.log)
+            elif vclass == "CIRCRNA":
+                recs = build_circrna_proteins(
+                    p["chrom"], p["start"], p["end"], p.get("strand", ""),
+                    p.get("gene", ""), ann, genome,
+                    min_aa=args.circ_min_aa, max_cycles=args.circ_max_cycles,
+                    source=row["source"], confidence=row["confidence"],
                     logger=rl.log)
             elif vclass.startswith("AS_"):
                 recs = build_splicing_proteins(

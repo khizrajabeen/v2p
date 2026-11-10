@@ -21,6 +21,7 @@ SMALL_VARIANTS = "small_variants"
 RNA_EDITING = "rna_editing"
 FUSION = "fusion"
 SPLICING = "splicing"
+CIRCRNA = "circrna"
 REGIONS = "regions"
 GENOME = "genome"
 ANNOTATION = "annotation"
@@ -34,6 +35,7 @@ ROLE_LABEL = {
     RNA_EDITING: "RNA editing sites",
     FUSION: "gene fusion calls",
     SPLICING: "alternative splicing events",
+    CIRCRNA: "circular RNA back-splice junctions",
     REGIONS: "high-confidence regions",
     GENOME: "reference genome",
     ANNOTATION: "gene annotation",
@@ -45,6 +47,7 @@ ROLE_LABEL = {
 
 _SUPPA = re.compile(r"^[^;]+;(SE|RI|MX|A3|A5|AF|AL):[^:]+:.+:[+-]$")
 _LOCUS = re.compile(r"^(chr)?[\w.]+:\d+$")
+_CIRC = re.compile(r"^(chr)?[\w.]+[:_]\d+[|_\-]\d+$")
 
 
 @dataclass
@@ -223,6 +226,21 @@ def detect_file(path: Path) -> Detection:
                          ev + ["allele spectrum not exclusively A>G/T>C"],
                          _count_records(p))
 
+    # circRNA - a back-splice id, or a header that names the type. Checked
+    # before splicing: a circRNA table can also carry chrom/start/end
+    # columns and must not be read as something it is not.
+    _circ_cols = {"circrna_id", "circ_id", "circrna"}
+    if any(h.lower() in _circ_cols for h in header):
+        ev.append("a column names circRNA explicitly")
+        return Detection(p, CIRCRNA, 0.97, ev, _count_records(p))
+    for col in range(min(4, len(header))):
+        vals = [r[col].strip() for r in data[:40] if len(r) > col]
+        if vals and sum(bool(_CIRC.match(v)) for v in vals) >= max(
+                2, len(vals) // 2):
+            ev.append(f"column {header[col]!r} holds back-splice ids")
+            return Detection(p, CIRCRNA, 0.95, ev, _count_records(p),
+                             {"id_column": header[col]})
+
     # SUPPA2 splicing events - look for the event-id grammar in any column
     for col in range(min(4, len(header))):
         vals = [r[col] for r in data[:40] if len(r) > col]
@@ -319,7 +337,8 @@ def build_run_plan(dets: list[Detection]) -> dict:
                     f"{ROLE_LABEL[role]}: {len(distinct)} candidates of "
                     f"similar confidence - name the one you want explicitly")
 
-    evidence = [r for r in (SMALL_VARIANTS, RNA_EDITING, FUSION, SPLICING)
+    evidence = [r for r in (SMALL_VARIANTS, RNA_EDITING, FUSION, SPLICING,
+                            CIRCRNA)
                 if r in plan["selected"]]
     if not evidence:
         plan["problems"].append("no variant evidence found in this folder")

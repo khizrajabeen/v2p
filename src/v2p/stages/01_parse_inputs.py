@@ -23,7 +23,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.parse.inputs import (  # noqa: E402
-    parse_annovar_res, parse_as_events, parse_fusions, parse_vcf,
+    parse_annovar_res, parse_as_events, parse_circrna, parse_fusions,
+    parse_vcf,
 )
 from v2p.provenance import RunLogger  # noqa: E402
 
@@ -38,6 +39,7 @@ def main() -> int:
     ap.add_argument("--res", help="ANNOVAR multianno RNA-editing table")
     ap.add_argument("--fusion", help="fusion gene CSV")
     ap.add_argument("--as-lr", dest="as_lr", help="alternative splicing CSV")
+    ap.add_argument("--circrna", help="circular RNA back-splice junctions")
     ap.add_argument("--outdir", default="results")
     ap.add_argument("--logdir", default="logs")
     ap.add_argument("--no-vcf-filter", action="store_true",
@@ -63,6 +65,10 @@ def main() -> int:
     if args.as_lr:
         rl.add_input("as_lr", args.as_lr)
         sources.append(("as_lr", lambda: parse_as_events(args.as_lr, logger=rl.log)))
+    if args.circrna:
+        rl.add_input("circrna", args.circrna)
+        sources.append(("circrna",
+                        lambda: parse_circrna(args.circrna, logger=rl.log)))
 
     if not sources:
         rl.log.error("no input files supplied")

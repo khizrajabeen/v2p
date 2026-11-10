@@ -22,6 +22,7 @@ from v2p.config import (
     ConfigError, config_from_namespace, load_config,
 )
 from v2p.discover import (
+    CIRCRNA,
     ANNOTATION, FUSION, GENOME, PROTEOME, REGIONS, RNA_EDITING,
     ROLE_LABEL, SMALL_VARIANTS, SPLICING, TRANSLATIONS,
     Detection, build_run_plan, detect_folder,
@@ -262,7 +263,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     # -- stage 1 ---------------------------------------------------------
     a = ["--outdir", str(work)]
     for role, flag in ((SMALL_VARIANTS, "--vcf"), (RNA_EDITING, "--res"),
-                       (FUSION, "--fusion"), (SPLICING, "--as-lr")):
+                       (FUSION, "--fusion"), (SPLICING, "--as-lr"),
+                       (CIRCRNA, "--circrna")):
         if role in sel:
             a += [flag, sel[role]]
     print("  [1/5] parsing inputs")

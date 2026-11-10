@@ -55,11 +55,17 @@ from v2p.validate import UniProtDB                         # noqa: E402
 # Which class label wins when one sequence arises from several variants.
 CLASS_PRIORITY = ["FUSION", "INDEL", "SNV", "MNV", "RNA_EDITING",
                   "AS_SE", "AS_RI", "AS_MX", "AS_A3", "AS_A5",
-                  "AS_AF", "AS_AL", "SEC_TERMINATION", "REFERENCE"]
+                  "AS_AF", "AS_AL", "CIRCRNA", "SEC_TERMINATION",
+                  "REFERENCE"]
 
 # Plain-language description of every file the split produces, so nobody
 # has to decode "AS_A3" from a filename.
 CLASS_DESC = {
+    "CIRCRNA": ("Circular RNA back-splice ORFs",
+                "Translated across the back-splice junction, which a "
+                "linear transcript cannot do. Only junction-crossing "
+                "ORFs are kept: one lying wholly inside the circularised "
+                "exons is also in the linear mRNA."),
     "SEC_TERMINATION": (
         "Selenoproteins terminated at their selenocysteine codon",
         "A UGA in a selenoprotein is read as selenocysteine when the "

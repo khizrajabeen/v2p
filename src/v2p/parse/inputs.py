@@ -390,3 +390,79 @@ def parse_as_events(path: str | Path, logger=None) -> Iterator[dict[str, Any]]:
     if logger:
         logger.info("AS events %s: %d rows -> %d events (%d unparseable)",
                     Path(path).name, n_in, n_out, n_bad)
+
+
+# --------------------------------------------------------------------------
+# 5. Circular RNA back-splice junctions
+# --------------------------------------------------------------------------
+
+_CIRC_ID = re.compile(r"^(chr[\w.]+|[\w.]+)[:_](\d+)[|_\-](\d+)$")
+_CIRC_ID_COLUMNS = ("circRNA_ID", "circrna_id", "circ_id", "circRNA", "id",
+                    "name")
+
+
+def parse_circ_id(value: str) -> tuple[str, int, int] | None:
+    """`chr1:1000|2000` and its `_`/`-` spellings -> (chrom, start, end)."""
+    m = _CIRC_ID.match((value or "").strip())
+    if not m:
+        return None
+    start, end = int(m.group(2)), int(m.group(3))
+    return (m.group(1), min(start, end), max(start, end))
+
+
+def parse_circrna(path: str | Path, logger=None) -> Iterator[dict[str, Any]]:
+    """Yield one record per back-splice junction.
+
+    Callers disagree about layout: CIRCexplorer2 writes BED, CIRI2 writes
+    a `circRNA_ID` of the form `chr1:1000|2000`, and others write plain
+    chrom/start/end columns. All three are read, the id form first,
+    because a file carrying it says unambiguously what it is.
+    """
+    n_in = n_out = n_bad = 0
+    with _open_text(path) as fh:
+        first = fh.readline()
+        fh.seek(0)
+        delim = "\t" if first.count("\t") >= first.count(",") else ","
+        rdr = csv.DictReader(fh, delimiter=delim)
+        for row in rdr:
+            n_in += 1
+            row = {(k or "").strip(): (v or "").strip()
+                   for k, v in row.items() if k}
+            loc = None
+            for col in _CIRC_ID_COLUMNS:
+                if row.get(col):
+                    loc = parse_circ_id(row[col])
+                    if loc:
+                        break
+            if loc is None:
+                chrom = (row.get("chrom") or row.get("chr")
+                         or row.get("Chr") or "")
+                try:
+                    s = int(row.get("start") or row.get("Start") or "")
+                    e = int(row.get("end") or row.get("End") or "")
+                except ValueError:
+                    n_bad += 1
+                    continue
+                if not chrom:
+                    n_bad += 1
+                    continue
+                loc = (chrom, min(s, e), max(s, e))
+            chrom, start, end = loc
+            strand = (row.get("strand") or row.get("Strand") or "").strip()
+            gene = (row.get("gene") or row.get("gene_id")
+                    or row.get("geneName") or row.get("symbol") or "").strip()
+            n_out += 1
+            yield {
+                "variant_id": f"CIRC|{chrom}:{start}-{end}",
+                "variant_class": "CIRCRNA",
+                "source": "circRNA_calls",
+                "genes": gene,
+                "locus": f"{chrom}:{start}-{end}",
+                "confidence": (row.get("score") or row.get("reads")
+                               or row.get("junction_reads") or "").strip(),
+                "payload": {"chrom": chrom, "start": start, "end": end,
+                            "strand": strand, "gene": gene},
+            }
+    if logger:
+        logger.info("circRNA %s: %d rows -> %d junctions (%d unreadable)",
+                    Path(path).name, n_in, n_out, n_bad)
