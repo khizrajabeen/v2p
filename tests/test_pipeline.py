@@ -396,6 +396,26 @@ def main() -> int:
     check("the uniprot accession carries the release name",
           "|MYSAMPLE_" in _hdr and "HCC1395" not in _hdr, _hdr[:80])
 
+    # A peptide absent from the reference proteome is not automatically
+    # novel: healthy tissue expresses isoforms the reference does not
+    # list. Splitting the two is what separates a tumour-specific
+    # peptide from an ordinary one nobody catalogued.
+    from v2p.peptides import (novel_peptides as _np,
+                              reference_peptide_space as _rps)
+    _ref_space = _rps(["MAAAKTTTTRQQQQK"], min_len=4)
+    _variant = "MAAAKTWTTRQQQQK"
+    _nov = _np(_variant, _ref_space, min_len=4)
+    check("the variant peptide is novel against the reference",
+          len(_nov) > 0)
+    _normal = {p.replace("I", "L") for p in _nov}
+    _still = {p for p in _nov if p.replace("I", "L") not in _normal}
+    check("a peptide normal tissue makes is no longer counted novel",
+          _still == set(), str(_still))
+    _partial = {sorted(_nov)[0].replace("I", "L")}
+    _left = {p for p in _nov if p.replace("I", "L") not in _partial}
+    check("peptides normal tissue does not make are kept",
+          len(_left) == len(_nov) - 1, f"{len(_left)} of {len(_nov)}")
+
     # ------------------------------------------------------- FASTA emission
     recs = build_small_variant_proteins("chrT1", p, "A", "C", ann, gen,
                                         variant_class="SNV", genes="GPLUS")

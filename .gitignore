@@ -8,6 +8,11 @@ ref/
 # which lives outside this repo and is not ours to redistribute.
 data/*
 !data/README.txt
+# The normal-tissue peptide set is a derived resource, not input data:
+# 2.7 MB distilled from 44 GB of junction downloads, and v2p reads it to
+# tell a tumour-specific peptide from an ordinary isoform one. Tracked so
+# the 44 GB does not have to be.
+!data/normal_peptides_*.txt.gz
 
 # Pipeline output. All of it is derived from src/ plus ref/ plus data/, and
 # all of it is large.

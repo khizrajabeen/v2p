@@ -342,6 +342,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     print("  [5/5] packaging")
     pk = ["--fasta", str(built), "--uniprot", sel[PROTEOME],
+          *(["--normal-peptides", args.normal_peptides]
+            if args.normal_peptides else []),
           "--name", args.name, "--outdir", str(out),
           "--extra-file", str(work / "qc")]
     if args.decoys != "none":
@@ -461,6 +463,14 @@ def _add_run_arguments(r: argparse.ArgumentParser,
     A("--name", default="variant_proteome")
     A("--transcript-mode", default="all",
       choices=["all", "representative"])
+    A("--normal-peptides", default=None, metavar="FILE",
+      help="peptides healthy tissue is known to make that the reference "
+           "proteome omits. A peptide missing from the reference is not "
+           "automatically novel - normal tissue expresses isoforms the "
+           "reference does not list - so with this each entry is scored "
+           "against both, and NOVELVSNORM counts what is new to the "
+           "sample rather than new to UniProt. "
+           "scripts/build_normal_peptides.py writes the file.")
     A("--no-construct-isoforms", dest="construct_isoforms",
       action="store_false",
       help="splicing: keep only events that match an annotated "

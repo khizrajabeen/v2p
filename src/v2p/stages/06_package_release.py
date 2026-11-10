@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import json
 import re
@@ -149,6 +150,16 @@ def main() -> int:
                     help="drop entries contributing no novel tryptic peptide")
     ap.add_argument("--drop-nmd", action="store_true",
                     help="drop entries flagged NMD=likely")
+    ap.add_argument("--normal-peptides",
+                    help="peptides known to occur in normal tissue and "
+                         "absent from the reference proteome, one per "
+                         "line, I/L equated (scripts/build_normal_"
+                         "peptides.py writes this). A peptide missing "
+                         "from the reference is not necessarily novel: "
+                         "healthy tissue makes isoforms the reference "
+                         "does not list, and a peptide from one of those "
+                         "is not a tumour-specific target. Given this, "
+                         "every entry is scored against both.")
     ap.add_argument("--missed-cleavages", type=int, default=2)
     ap.add_argument("--min-pep-len", type=int, default=6)
     ap.add_argument("--max-pep-len", type=int, default=50)
@@ -207,6 +218,22 @@ def main() -> int:
                 "(I/L equated)", len(ref_space))
     rl.count("reference_peptides", len(ref_space))
 
+    # Peptides healthy tissue makes that the reference proteome omits.
+    # Without this, "absent from the reference" is read as "novel", and
+    # an ordinary isoform peptide is indistinguishable from a tumour
+    # target.
+    normal_space: set[str] = set()
+    if args.normal_peptides:
+        rl.add_input("normal_peptides", args.normal_peptides)
+        opener = gzip.open if args.normal_peptides.endswith(".gz") else open
+        with opener(args.normal_peptides, "rt", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    normal_space.add(line)
+        rl.log.info("normal-tissue peptides: %d", len(normal_space))
+        rl.count("normal_peptides", len(normal_space))
+
     # ---- 3. build the release records ---------------------------------
     rows = []
     provenance = []
@@ -231,7 +258,16 @@ def main() -> int:
 
         nov = novel_peptides(seq, ref_space, args.missed_cleavages,
                              args.min_pep_len, args.max_pep_len)
+        # Novel against the reference, split by whether normal tissue
+        # is already known to make it.
+        in_normal = ({p for p in nov if p.replace("I", "L") in normal_space}
+                     if normal_space else set())
+        nov_strict = nov - in_normal
         pos = meta.get("POS")
+        # The variant-spanning subset matters most: a peptide that does
+        # not cover the variant residue is isoform-specific, not
+        # evidence of the variant, and a database can carry many of
+        # those while offering nothing tumour-specific at all.
         span = variant_spanning_peptides(
             seq, int(pos) if pos and pos.isdigit() else None, nov)
         n_all = len(digest(seq, args.missed_cleavages,
@@ -263,6 +299,10 @@ def main() -> int:
         if also:
             new_hdr += " ALSO=" + ",".join(also)
         new_hdr += f" NOVELPEP={len(nov)} VARPEP={len(span)} NPEP={n_all}"
+        if normal_space:
+            new_hdr += (f" NORMPEP={len(in_normal)} "
+                        f"NOVELVSNORM={len(nov_strict)} "
+                        f"VARPEPVSNORM={len(span - in_normal)}")
         kept.append((new_hdr, seq))
         stats[f"kept.{primary}"] += 1
         if not nov and primary != "REFERENCE":
@@ -287,7 +327,10 @@ def main() -> int:
             "protein_length": len(seq),
             "n_tryptic_peptides": n_all,
             "n_novel_peptides": len(nov),
+            "n_novel_also_in_normal_tissue": len(in_normal),
+            "n_novel_vs_normal_tissue": len(nov_strict),
             "n_variant_spanning_novel": len(span),
+            "n_variant_spanning_vs_normal": len(span - in_normal),
             "example_novel_peptide": sorted(span or nov)[0] if (span or nov) else "",
             "notes": meta.get("NOTE", ""),
         }
