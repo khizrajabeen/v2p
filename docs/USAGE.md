@@ -243,6 +243,7 @@ Detection can be bypassed per evidence type:
 | flag | why |
 |---|---|
 | `--transcript-mode representative` | one transcript per gene instead of all. Much smaller database. |
+| `--normal-peptides <file>` | peptides healthy tissue makes that the reference omits. Without it, "absent from UniProt" is read as "novel"; with it, each entry is scored against both and `*.peptide_candidates.tsv` lists the peptides a search could actually act on. |
 | `--fusion-orientation as-given` | trust the fusion table's partner order. Arriba, STAR-Fusion, JAFFA, JAFFAL, CTAT-LR-fusion and FusionSeeker all name the 5' partner first; for those, building both orders adds a chimera the sample does not contain. |
 | `--header-style peff \| uniprot \| pvac \| descriptive` | re-emit in another convention without re-translating |
 | `--decoys none` | if your search engine generates its own |

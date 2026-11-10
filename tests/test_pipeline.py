@@ -416,6 +416,36 @@ def main() -> int:
     check("peptides normal tissue does not make are kept",
           len(_left) == len(_nov) - 1, f"{len(_left)} of {len(_nov)}")
 
+    # A database says which proteins might be present; which peptides
+    # could evidence one is a different question. Each condition must
+    # remove its own kind of peptide and nothing else.
+    from v2p.peptides import candidate_funnel
+    _meta = {
+        "GOOD":   {"peptide": "GOOD", "variant_spanning": 1,
+                   "in_normal_tissue": 0},
+        "NORMAL": {"peptide": "NORMAL", "variant_spanning": 1,
+                   "in_normal_tissue": 1},
+        "NOSPAN": {"peptide": "NOSPAN", "variant_spanning": 0,
+                   "in_normal_tissue": 0},
+        "SHARED": {"peptide": "SHARED", "variant_spanning": 1,
+                   "in_normal_tissue": 0},
+    }
+    _entries = {"GOOD": ["e1"], "NORMAL": ["e1"], "NOSPAN": ["e1"],
+                "SHARED": ["e1", "e2"]}
+    _rows, _counts = candidate_funnel(_entries, _meta)
+    check("only the peptide passing every condition survives",
+          [r["peptide"] for r in _rows] == ["GOOD"],
+          str([r["peptide"] for r in _rows]))
+    check("the funnel counts each stage",
+          (_counts["novel_vs_reference"], _counts["not_in_normal_tissue"],
+           _counts["variant_spanning"], _counts["proteotypic"])
+          == (4, 3, 2, 1), str(dict(_counts)))
+    check("a peptide shared by two entries is not proteotypic",
+          all(r["n_entries_sharing"] == 1 for r in _rows))
+    check("the same entry listed twice is still one entry",
+          len(candidate_funnel({"GOOD": ["e1", "e1"]},
+                               {"GOOD": _meta["GOOD"]})[0]) == 1)
+
     # ------------------------------------------------------- FASTA emission
     recs = build_small_variant_proteins("chrT1", p, "A", "C", ann, gen,
                                         variant_class="SNV", genes="GPLUS")

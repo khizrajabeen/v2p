@@ -45,7 +45,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from v2p.peptides import (                                 # noqa: E402
-    DECOY_METHODS, digest, novel_peptides, reference_peptide_space,
+    DECOY_METHODS, candidate_funnel, digest, novel_peptides,
+    reference_peptide_space,
     variant_spanning_peptides,
 )
 from v2p.provenance import RunLogger, sha256               # noqa: E402
@@ -247,6 +248,11 @@ def main() -> int:
     # grew. Only novel peptides are accumulated - the rest are already in
     # the reference and cost nothing.
     added_peptides: set[str] = set()
+    # Which entries each novel peptide can come from. A peptide shared by
+    # fifty entries identifies none of them, so a candidate list has to
+    # know this before it can rank anything.
+    pep_entries: dict[str, list[str]] = {}
+    pep_meta: dict[str, dict] = {}
     added_by_class: dict[str, set[str]] = {}
     for seq, hits in by_seq.items():
         classes = [h[1].get("VT", "?") for h in hits]
@@ -391,6 +397,21 @@ def main() -> int:
                  "protein_change": h[1].get("PC", "")}
                 for h in hits],
         })
+        for _p in nov:
+            _k = _p.replace("I", "L")
+            pep_entries.setdefault(_k, []).append(row["seq_id"])
+            if _k not in pep_meta:
+                pep_meta[_k] = {
+                    "peptide": _p,
+                    "seq_id": row["seq_id"],
+                    "gene": row["gene"],
+                    "variant_class": row["variant_class"],
+                    "consequence": row["consequence"],
+                    "protein_change": row["protein_change"],
+                    "locus": row["locus"],
+                    "variant_spanning": int(_p in span),
+                    "in_normal_tissue": int(_p in in_normal),
+                }
         rows.append(row)
 
     # ---- 4. reference + decoys ----------------------------------------
@@ -508,6 +529,40 @@ def main() -> int:
             w.writeheader()
             w.writerows(rows)
     rl.add_output("entry_table", table)
+
+    # ---- candidate peptides -------------------------------------------
+    # A database says which proteins might be there. A search needs to
+    # know which peptides could actually evidence one, and they are not
+    # the same set. Four conditions have to hold at once, and each is
+    # already computed above for its own reasons:
+    #
+    #   absent from the reference proteome   - else it is canonical
+    #   not made in normal tissue            - else it is not specific
+    #   covers the variant residue           - else it evidences the
+    #                                          isoform, not the variant
+    #   maps to exactly one entry            - else it identifies nothing
+    #
+    # Reported as a funnel rather than a single number, because which
+    # condition removes the most says what a given database is short of.
+    cand = out / f"{args.name}.peptide_candidates.tsv"
+    kept_rows, funnel = candidate_funnel(pep_entries, pep_meta)
+
+    cols = ["peptide", "peptide_length", "seq_id", "gene", "variant_class",
+            "consequence", "protein_change", "locus", "variant_spanning",
+            "in_normal_tissue", "n_entries_sharing"]
+    with open(cand, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols, delimiter=chr(9),
+                           lineterminator=chr(10), extrasaction="ignore")
+        w.writeheader()
+        for r in sorted(kept_rows, key=lambda x: (x["gene"], x["peptide"])):
+            w.writerow(r)
+    rl.add_output("peptide_candidates", cand)
+    for k, v in funnel.items():
+        rl.count(f"candidates.{k}", v)
+    rl.log.info("candidate peptides: %d novel -> %d not normal -> "
+                "%d variant-spanning -> %d proteotypic",
+                funnel["novel_vs_reference"], funnel["not_in_normal_tissue"],
+                funnel["variant_spanning"], funnel["proteotypic"])
 
     # What the database costs to search. Reported next to the entry counts
     # because the two can move in opposite directions: thousands of extra

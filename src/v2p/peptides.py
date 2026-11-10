@@ -184,3 +184,48 @@ def digest_stats(sequences) -> dict:
     return {"n_peptides": total,
             "mean_length": round(sum(k * v for k, v in peps.items())
                                  / total, 2) if total else 0}
+
+
+# --------------------------------------------------------------------------
+# candidate peptides
+# --------------------------------------------------------------------------
+
+CANDIDATE_STAGES = ("novel_vs_reference", "not_in_normal_tissue",
+                    "variant_spanning", "proteotypic")
+
+
+def candidate_funnel(pep_entries: dict, pep_meta: dict):
+    """Narrow novel peptides to the ones a search could act on.
+
+    A database says which proteins might be present. Which peptides could
+    evidence one is a different question, and four conditions have to hold
+    at once:
+
+        absent from the reference proteome  - else it is canonical
+        not made in normal tissue           - else it is not specific
+        covers the variant residue          - else it evidences the
+                                              isoform, not the variant
+        maps to exactly one entry           - else it identifies nothing
+
+    Returns (rows, counts). The counts are a funnel rather than one
+    number: which condition removes the most is what says whether a
+    database is short of specificity or short of resolution.
+    """
+    counts: Counter = Counter()
+    rows = []
+    for key, entries in pep_entries.items():
+        m = pep_meta[key]
+        counts["novel_vs_reference"] += 1
+        if m.get("in_normal_tissue"):
+            continue
+        counts["not_in_normal_tissue"] += 1
+        if not m.get("variant_spanning"):
+            continue
+        counts["variant_spanning"] += 1
+        n_sharing = len(set(entries))
+        if n_sharing != 1:
+            continue
+        counts["proteotypic"] += 1
+        rows.append({**m, "n_entries_sharing": n_sharing,
+                     "peptide_length": len(m["peptide"])})
+    return rows, counts

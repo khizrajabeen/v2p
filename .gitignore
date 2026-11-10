@@ -84,3 +84,4 @@ ensembl_translation-*.log
 # copy the scripts actually read is not.
 events/*.tsv
 !events/*.tsv.gz
+external/
