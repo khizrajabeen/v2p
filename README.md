@@ -36,10 +36,10 @@ failure message is in [docs/USAGE.md](docs/USAGE.md).
 - **Per-variant disposition** — every input gets a recorded outcome, so a
   recovery rate can be stated rather than assumed.
 - **[Combinatorial proteoforms](docs/USAGE.md#combinatorial-proteoforms)** —
-  the protein carrying all co-occurring variants, phase honoured where the
-  caller reports it. Uniquely, these can combine *across* evidence types:
-  an SNV co-occurring with an RNA edit is invisible to any genotype panel,
-  because RNA editing never appears in a VCF.
+  the protein carrying all co-occurring variants, including across
+  evidence types, and **phase honoured where the caller reports it**:
+  variants the caller placed on opposite haplotypes are never combined,
+  and combinations without phase are marked as the hypotheses they are.
 - **[Non-canonical ORFs](docs/USAGE.md#about---include-noncanonical)** —
   three-frame translation of lncRNAs, pseudogenes and UTRs. Opt-in.
 - **Nine release invariants** — mechanical self-checks before success is
@@ -71,13 +71,32 @@ Every disagreement and how to rerun each comparison:
 
 ## Scope and limits
 
-Combining co-occurring variants is not new — [ProHap](https://doi.org/10.1038/s41592-024-02506-0)
-(*Nature Methods* 2024) does it for phased germline haplotypes. v2p works
-in its companion ProVar's scope, one sample, and combines there.
+Neither combining co-occurring variants nor combining across evidence
+types is new. [ProHap](https://doi.org/10.1038/s41592-024-02506-0)
+(*Nature Methods* 2024) combines phased germline haplotypes;
+[moPepGen](https://doi.org/10.1038/s41587-025-02701-0) (*Nature
+Biotechnology* 2025) covers SNVs, indels, fusions, splicing, RNA editing
+and circRNA, and states it generates peptides for "any combination" of
+them. v2p overlaps that scope and does not claim to have got there first.
+
+What v2p does that those papers do not describe:
+
+- **Phase is a constraint, not a footnote.** Two heterozygous variants on
+  opposite alleles sit on no single molecule, so that proteoform does not
+  exist. v2p reads `GT`/`PS`, refuses those combinations, and marks the
+  rest `unphased` so a hypothesis is never mistaken for an observation.
+  moPepGen's paper does not discuss phase or haplotypes.
+- **Every input variant gets a recorded outcome**, including the ones
+  producing nothing, so a recovery rate is measured rather than assumed.
+- **The release checks itself** — nine invariants, exiting non-zero on
+  any error-severity violation.
+
+Remaining limits:
 
 - Cross-evidence combination is proven by test and by a
   [constructed case](benchmarks/cross_evidence_case.md), not yet by an
   observation in real data.
+- v2p has not been benchmarked head to head against moPepGen.
 - Where a caller reports no phase, co-occurrence is assumed rather than
   known. Entries say which in `PHASE=`; `--no-allow-unphased` drops them.
 - Only genetic-code tables 1 and 2 are implemented. A species needing
